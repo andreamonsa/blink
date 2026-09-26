@@ -12,6 +12,21 @@ the **summarizer** reads out. Both contracts are documented below.
 
 ---
 
+## Quick start
+
+```bash
+python3 -m venv .venv && .venv/bin/python -m pip install -r requirements.txt
+./run.sh                    # lecture heard through the microphone
+BLINK_AUDIO=tab ./run.sh    # online lecture: capture a Chrome tab's audio
+BLINK_LIVE=0 ./run.sh       # strict mode: transcribe only what was missed
+```
+
+`run.sh` starts Ollama (if installed), the eye tracker and the backend, warms
+the models and opens the app. It works without Ollama (no written summaries, but
+priorities and the exact words still appear) and prints a warning if the eye
+tracker cannot open the camera. Logs go to `.logs/`. The first time, macOS asks
+for camera access for the terminal you ran it from.
+
 ## Running the whole team's system
 
 On `main` every piece lives in this repo. On a machine with
