@@ -24,6 +24,11 @@ const DEFAULTS = {
   gapMs: 1_200,       // a silence this long ends a sentence even without a "."
   maxWords: 40,       // never let one line grow without bound
   tickMs: 1_000,
+  // Context after the slice that ends exactly where the student looked back.
+  // Whisper stretches the first word of the NEXT sentence backwards over the
+  // silence, so generous context there drags an attended word into the missed
+  // window. Measured earlier: 750 ms leaked, 250 ms did not.
+  tailPadMs: 250,
 };
 
 const SENTENCE_END = /[.?!]["')\]]*$/;
@@ -34,6 +39,10 @@ export function createLiveTranscriber({
   getConfig = () => ({}),
   onLine = () => {},
   onStatus = () => {},
+  // Was the student away while [startMs, endMs] was being said? Asked when a
+  // line is built, so a line can be marked by WHEN it was spoken, not by when
+  // its text happened to arrive a few seconds later.
+  isMissed = () => false,
 }) {
   const cfg = () => ({ ...DEFAULTS, ...getConfig() });
 
@@ -55,13 +64,10 @@ export function createLiveTranscriber({
     if (pendingId === null) pendingId = `live-${++lineSeq}`;
     const first = pending[0];
     const last = pending[pending.length - 1];
-    lines.set(pendingId, { start_ms: first.start_ms, end_ms: last.end_ms });
-    onLine({
-      id: pendingId,
-      t: sessionToEpochMs(first.start_ms),
-      text: pending.map((w) => w.text).join(" "),
-      final,
-    });
+    const text = pending.map((w) => w.text).join(" ");
+    const missed = isMissed(first.start_ms, last.end_ms);
+    lines.set(pendingId, { start_ms: first.start_ms, end_ms: last.end_ms, text, final, missed });
+    onLine({ id: pendingId, t: sessionToEpochMs(first.start_ms), text, final, missed });
     if (final) { pending = []; pendingId = null; }
   }
 
@@ -80,9 +86,9 @@ export function createLiveTranscriber({
 
   // --------------------------------------------------------------- transcribing
 
-  async function postSlice(startMs, endMs) {
+  async function postSlice(startMs, endMs, endPadMs = null) {
     const { padMs } = cfg();
-    const slice = capture.sliceToWav(startMs - padMs, endMs + padMs);
+    const slice = capture.sliceToWav(startMs - padMs, endMs + (endPadMs ?? padMs));
     if (!slice) return;
 
     const form = new FormData();
@@ -140,11 +146,12 @@ export function createLiveTranscriber({
   function flushTo(endMs) {
     return enqueue(async () => {
       if (!ensureCursor()) return;
-      const { chunkMs } = cfg();
+      const { chunkMs, tailPadMs } = cfg();
       while (cursor < endMs) {
         const start = cursor;
         cursor = Math.min(start + chunkMs, endMs);
-        await postSlice(start, cursor);
+        // Only the slice that stops at endMs sits on the window edge.
+        await postSlice(start, cursor, cursor === endMs ? tailPadMs : null);
       }
     });
   }
@@ -191,6 +198,18 @@ export function createLiveTranscriber({
     /** Words overlapping [startMs, endMs], by the exact interval-overlap rule. */
     wordsBetween(startMs, endMs) {
       return words.filter((w) => w.end_ms > startMs && w.start_ms < endMs);
+    },
+
+    /**
+     * A missed window has just been confirmed: mark the lines already on screen
+     * that overlap it. Lines still to arrive are marked as they are built.
+     */
+    markMissed(startMs, endMs) {
+      for (const [id, line] of lines) {
+        if (line.missed || !(line.end_ms > startMs && line.start_ms < endMs)) continue;
+        line.missed = true;
+        onLine({ id, t: sessionToEpochMs(line.start_ms), text: line.text, final: line.final, missed: true });
+      }
     },
 
     /** Ids of the live lines overlapping [startMs, endMs]. */

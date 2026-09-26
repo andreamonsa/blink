@@ -80,7 +80,7 @@
     el.jumpLive.hidden = true;
   });
 
-  function onLine({ id, t, text, final }) {
+  function onLine({ id, t, text, final, missed }) {
     el.empty.hidden = true;
     withFollow(() => {
       let line = state.lines.get(id);
@@ -96,7 +96,10 @@
       const body = line.el.querySelector(".line-text");
       body.textContent = text;
       line.el.classList.toggle("interim", !final);
-      if (state.zone === "away") line.el.classList.add("missed");
+      // A source that knows when each line was spoken says so with `missed`.
+      // Otherwise (the mock) fall back to whether we are away as it arrives,
+      // which is wrong for a source whose text lags the speech.
+      if (missed === true || (missed === undefined && state.zone === "away")) line.el.classList.add("missed");
       // Safe on interim text too: auto-render only typesets closed \( \) pairs
       // and leaves a half-spoken formula as plain text until it's complete.
       renderMath(body);

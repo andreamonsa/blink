@@ -75,11 +75,25 @@ export function createSilentSpecsSource({
     onStatus,
   });
 
+  // Away windows already resolved, in session ms. Together with the window
+  // still open they decide which spoken lines count as missed.
+  const missedWindows = [];
+  function isMissed(startMs, endMs) {
+    if (missedWindows.some((w) => endMs > w.start_ms && startMs < w.end_ms)) return true;
+    // An absence that has been confirmed (>= 2 s) but not yet ended.
+    if (gaze?.getState() === "CONFIRMED_AWAY") {
+      const since = gaze.getAwayStartMs();
+      if (since !== null && endMs > since) return true;
+    }
+    return false;
+  }
+
   const liveCtl = live
     ? createLiveTranscriber({
         capture, backendUrl,
         onLine: (line) => onLine?.(line),
         onStatus,
+        isMissed,
       })
     : null;
 
@@ -93,6 +107,10 @@ export function createSilentSpecsSource({
 
     const missed = liveCtl.wordsBetween(start_ms, end_ms);
     if (!missed.length) { onStatus({ phase: "empty", start_ms, end_ms }); return null; }
+
+    // Mark it on screen now, whatever the server does next.
+    missedWindows.push({ start_ms, end_ms });
+    liveCtl.markMissed(start_ms, end_ms);
 
     let record;
     try {
