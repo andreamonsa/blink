@@ -33,13 +33,14 @@ SYSTEM_PROMPT = (
     "Do not add information that is not in the transcript. "
     "Do not start with phrases like 'The speaker says' or 'This segment discusses'. "
     "Write all math as LaTeX wrapped in dollar signs: $...$ for inline math "
-    "and $$...$$ for standalone equations. Never use \\( \\) or \\[ \\]."
+    "and $$...$$ for standalone equations. Never use \\( \\) or \\[ \\]. "
+    "Always retain dates, quantities, and named people/places exactly as stated. "
 )
 
 # \( ... \)  ->  $ ... $        and        \[ ... \]  ->  $$ ... $$
 _INLINE_RE = re.compile(r"\\\((.+?)\\\)", re.DOTALL)
 _DISPLAY_RE = re.compile(r"\\\[(.+?)\\\]", re.DOTALL)
-
+NUM_CTX = 4096
 
 def _normalize_math(text: str) -> str:
     """Convert any \\( \\) / \\[ \\] delimiters the model emits into $ / $$."""
@@ -102,7 +103,7 @@ def summarize(
             options={
                 "temperature": temperature,
                 "num_predict": int(max_words * 2.5),  # token cap; words ≈ 1.3-1.5 tokens + margin
-                "num_ctx": 4096,                       # context window; enough for ~2500 words in
+                "num_ctx": NUM_CTX,                       # context window; enough for ~2500 words in
             },
             keep_alive="15m",  # keep model loaded in memory between calls (important for real-time)
         )
@@ -113,16 +114,11 @@ def summarize(
 
 
 def warm_up(model: str = MODEL) -> None:
-    """
-    Load the model into memory. Call once at application startup.
-    The first call to a cold model takes several seconds; subsequent calls are fast.
-    The model stays loaded for 15 min after the last call.
-    """
     try:
         ollama.chat(
             model=model,
             messages=[{"role": "user", "content": "ok"}],
-            options={"num_predict": 1},
+            options={"num_predict": 1, "num_ctx": NUM_CTX},   # ← must match summarize()
             keep_alive="15m",
         )
     except (ollama.ResponseError, ConnectionError) as e:
