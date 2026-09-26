@@ -635,4 +635,4 @@ if __name__ == "__main__":
         choice = input("Which step? [c]ollect / [t]rain / [r]un: ").strip().lower()[:1]
         sys.argv.append({"c": "collect", "t": "train", "r": "run"}.get(choice, "collect"))
     args = ap.parse_args()
-    {"collect": cmd_collect, "train": cmd_train, "run": cmd_run}[args.cmd](args)r
+    {"collect": cmd_collect, "train": cmd_train, "run": cmd_run}[args.cmd](args)
