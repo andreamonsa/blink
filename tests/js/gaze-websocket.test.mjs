@@ -177,3 +177,21 @@ test("leadMs shifts both edges and preserves the duration", async () => {
   // Both edges moved 400 ms earlier than the uncompensated conversion.
   assert.ok(Math.round(sessionToEpochMs(windows[0].start_ms)) <= at - 399);
 });
+
+test("gaze.py's live status frames never consume the snapshot or trigger anything", async () => {
+  // Newer gaze.py broadcasts {"type":"status",...} about five times a second.
+  // If one of those were mistaken for the connect snapshot, the first real
+  // transition would be swallowed instead.
+  const { sock, windows } = harness();
+  const status = () => sock.deliver({ type: "status", zone: "panel", t: Date.now(), p: 0.93, evidence: 1.2, threshold: 4.55 });
+  status(); status();
+  sock.deliver({ type: "zone", zone: "panel", t: Date.now(), since: Date.now() }); // the real snapshot
+  status();
+  const at = Date.now();
+  sock.deliver({ type: "zone", zone: "away", t: at });
+  status(); status(); status();
+  sock.deliver({ type: "zone", zone: "panel", t: at + 4000, since: at });
+  await new Promise((r) => setImmediate(r));
+  assert.equal(windows.length, 1, "status frames must be inert");
+  assert.equal(Math.round(windows[0].end_ms - windows[0].start_ms), 4000);
+});

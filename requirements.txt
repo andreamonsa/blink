@@ -1,8 +1,17 @@
-# Pinned: the laya docs site documents a newer unreleased API than 0.3.20,
-# and faster-whisper's word-timestamp behaviour is what the selector relies on.
+# Voice-to-text backend. Pinned: the laya docs site documents a newer
+# unreleased API than 0.3.20, and the selector relies on faster-whisper's
+# word timestamps.
 faster-whisper==1.2.1
 laya==0.3.20
 fastapi
 uvicorn
 python-multipart
 httpx
+
+# summarizer.py (runs inside the backend; needs a local Ollama server)
+ollama
+
+# gaze.py (run as its own process: python gaze.py run --no-preview)
+mediapipe
+websockets
+numpy

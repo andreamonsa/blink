@@ -169,7 +169,13 @@
 
   // ----------------------------------------------------------- catch-ups
   async function createCatchup(from, to, reason) {
-    const lines = [...state.lines.values()].filter((l) => l.final && l.tEnd >= from && l.t <= to);
+    // Real speech-to-text arrives ~1 s after the return that triggers this
+    // card. If the source can tell us, wait for this window and take exactly
+    // its lines; otherwise (the mock) fall back to the time-overlap filter.
+    const own = reason === "gaze" && transcript.waitForWindow
+      ? await transcript.waitForWindow(from, to) : null;
+    const lines = [...state.lines.values()].filter((l) =>
+      l.final && (own ? own.has(l.id) : l.tEnd >= from && l.t <= to));
     if (!lines.length && reason === "gaze") return; // nothing was said, nothing to show
 
     const c = { id: ++catchupSeq, from, to, reason, lines, status: lines.length ? "loading" : "empty", result: null };

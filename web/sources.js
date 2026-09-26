@@ -3,6 +3,8 @@
 //
 //   ?source=mock    (default) scripted lecture + hold Space to "look away"
 //   ?source=python  gaze from Zachary's `python gaze.py run` (ws://localhost:8765)
+//                   + real speech-to-text of the lecture tab + real summarizer.
+//                   Serve this page from the STT backend (uvicorn backend.app:app).
 //   &gaze=ws://host:port   override the gaze WebSocket URL
 //
 // Interfaces app.js expects:
@@ -126,11 +128,66 @@ window.Blink = window.Blink || {};
     };
   }
 
+  // ------------------------------------------------- transcript (real, Mattia)
+  // Tab audio -> faster-whisper -> exact missed-word selection -> Laya tags.
+  // Emits ONLY lines spoken while the student was away: attended speech is
+  // never transcribed or stored (CLAUDE.md's invariant), so the transcript
+  // fills in when they look back rather than streaming the whole lecture.
+  //
+  // The module is an ES module loaded from the STT backend. Importing it now,
+  // at page load, keeps start() inside the Start click: tab capture needs that
+  // user gesture, and an import started inside the click could outlive it.
+  const realSource = SOURCE === "python"
+    ? import("/js/silentspecs-source.js").then((m) =>
+        m.createSilentSpecsSource({ gazeUrl: GAZE_URL }))
+    : null;
+
+  function realTranscript() {
+    return {
+      async start(onLine) { (await realSource).start(onLine).catch(reportStartError); },
+      async stop() { (await realSource).stop(); },
+      // app.js awaits this before building a gaze catch-up card, so the card
+      // finds the recovered lines instead of rendering before they exist.
+      async waitForWindow(from, to) { return (await realSource).waitForWindow(from, to); },
+    };
+  }
+
+  function reportStartError(err) {
+    console.error("speech-to-text failed to start", err);
+    alert("Couldn't capture the lecture audio.\n\n" +
+          'In the share dialog pick the lecture\'s Chrome tab and tick "Also share tab audio".' +
+          "\n\n(" + err.message + ")");
+  }
+
+  // ------------------------------------------------- summarizer (real, Louis)
+  // summarizer.py runs inside the STT backend (backend/summarizer_bridge.py).
+  // We send a *range*, never text: the backend reads the missed windows from
+  // its own store, so nothing but missed speech can reach the LLM.
+  // Priorities come from the Laya tags, so they still work if Ollama is down.
+  function realSummarizer() {
+    return {
+      async summarize({ lines }) {
+        const src = await realSource;
+        const range = src.rangeFor(lines.map((l) => l.id));
+        if (!range) return { summary: null, priorities: [] };
+        const res = await fetch(`/session/${src.sessionId}/summarize`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(range),
+        });
+        if (!res.ok) throw new Error(`summarize ${res.status}`);
+        const { summary, priorities } = await res.json();
+        return { summary, priorities };
+      },
+    };
+  }
+
+  const REAL = SOURCE === "python";
   Blink.sources = {
     mode: SOURCE,
     gazeUrl: GAZE_URL,
-    gaze: { connect: SOURCE === "python" ? pythonGaze : mockGaze },
-    transcript: mockTranscript(),
-    summarizer: mockSummarizer(),
+    gaze: { connect: REAL ? pythonGaze : mockGaze },
+    transcript: REAL ? realTranscript() : mockTranscript(),
+    summarizer: REAL ? realSummarizer() : mockSummarizer(),
   };
 })();

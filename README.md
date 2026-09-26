@@ -18,24 +18,34 @@ the **summarizer** reads out. Both contracts are documented below.
 
 ## Running the whole team's system
 
-Three processes, one page:
+On `main` every piece lives in this repo. On a machine with
+[Ollama](https://ollama.com) installed:
 
 ```bash
-# 1. Eye tracker -- from the teammate's eyetracker branch, cwd = its repo root
-python gaze.py run --no-preview          # WebSocket on ws://localhost:8765
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+ollama pull qwen2.5:3b-instruct-q5_K_M        # the summarizer's model, ~2.3 GB
+.venv/bin/python tools/generate_synthetic_audio.py   # test fixtures (macOS only)
+```
 
-# 2. Summarizer model -- the teammate's summarizer.py needs a local Ollama
-ollama serve &  ollama pull qwen2.5:3b-instruct-q5_K_M
+Then three processes, all from the repo root:
 
-# 3. This backend: STT, selection, Laya, the summarizer bridge, and the web UI
-SUMMARIZER_DIR=/path/to/their/summarizer/checkout \
-  .venv/bin/python -m uvicorn backend.app:app --port 8000
+```bash
+ollama serve                                         # 1. summarizer model
+.venv/bin/python gaze.py run --no-preview            # 2. eye tracker, ws://localhost:8765
+.venv/bin/python -m uvicorn backend.app:app --port 8000   # 3. STT + Laya + summarizer + UI
+```
+
+Warm all three models once so the first card isn't a cold start:
+
+```bash
+curl -X POST http://127.0.0.1:8000/warmup
 ```
 
 Open **<http://127.0.0.1:8000/?source=python>** in Chrome, play the lecture in
 another Chrome tab, press Start, and share that tab **with "Also share tab
-audio"** ticked. `/?source=mock` still runs the teammate's scripted demo with
-no hardware at all; `/debug/` is the diagnostics page.
+audio"** ticked. `/?source=mock` runs the scripted demo
+with no hardware; `/debug/` is the diagnostics page.
 
 What each piece does, and where they meet:
 
@@ -47,6 +57,8 @@ What each piece does, and where they meet:
 | `backend/` | Whisper → exact word-overlap selection → Laya → session store. |
 | `frontend/js/silentspecs-source.js` | Feeds the web app **only missed lines**, one per Laya fragment. |
 | `web/` | The teammate's UI, unchanged apart from `sources.js` and a 7-line patch to `createCatchup`. |
+| `summarizer.py` | The teammate's summarizer, imported by the backend from the repo root. |
+| `gaze.py` | The teammate's eye tracker, run as its own process. |
 | `backend/summarizer_bridge.py` | Runs `summarizer.py`. Card priorities come from Laya tags, so they still appear if Ollama is down. |
 
 **The transcript pane only ever shows missed speech.** The teammate's mock
@@ -74,14 +86,14 @@ being transcribed or stored, so lines appear when the student looks back.
 - **Nothing but missed text reaches the LLM.** `/session/{id}/summarize` takes a
   time range, never text, and reads the windows from the session store.
 
-### Known issues on the teammates' side
+### Notes on the teammates' modules
 
-- `gaze.py` on the `web` branch ends in `...[args.cmd](args)r` -- a stray `r`
-  that is a `SyntaxError`. Use the `eyetracker` branch's copy.
 - The committed `gaze_model.pkl` was trained on one person's face, camera and
-  screen. Anyone else needs `gaze.py collect` then `gaze.py train`.
-- `gaze.py run --host` does not exist despite its docstring; it binds to
-  `localhost` only.
+  screen. Anyone else needs `python gaze.py collect` then `python gaze.py train`.
+- `gaze.py` must run from the repo root (its model paths are relative) and with
+  `--no-preview`; the OpenCV window otherwise throttles its event loop.
+- The `web` branch's own `gaze.py` still ends in a stray `r` (a `SyntaxError`);
+  `main` carries the working copy from the `eyetracker` branch.
 
 ### Memory: the full stack is tight on an 8 GB laptop
 
