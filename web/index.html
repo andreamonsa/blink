@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Blink</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Roboto+Mono:wght@400&display=swap">
+  <!-- KaTeX renders the LaTeX that speech-to-text / summarizer.py emit. If it
+       fails to load (offline), formulas simply stay as raw text. -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="frame">
+    <!-- Left: live transcript -->
+    <section class="transcript-col" aria-labelledby="transcript-title">
+      <header class="transcript-head">
+        <h1 id="transcript-title">Real time transcript</h1>
+        <div class="pills">
+          <span id="live-pill" class="pill">Paused</span>
+          <span id="gaze-pill" class="pill">Eye tracker…</span>
+        </div>
+      </header>
+
+      <div class="transcript-wrap">
+        <div id="transcript" class="transcript" role="log" aria-live="off" tabindex="0">
+          <p id="transcript-empty" class="empty">Press <strong>start</strong> to begin live captions.</p>
+        </div>
+        <button id="jump-live" class="jump-live" hidden>Back to live ↓</button>
+      </div>
+
+      <div class="controls">
+        <button id="btn-start" class="round-btn" aria-pressed="false">start</button>
+        <button id="btn-summary" class="round-btn">summary</button>
+      </div>
+      <p id="hint" class="hint"></p>
+    </section>
+
+    <!-- Right: catch-up card + history -->
+    <aside class="side-col" aria-label="Catch up">
+      <section id="catchup-current" class="catchup-card" aria-live="polite"></section>
+      <section class="past" aria-labelledby="past-title">
+        <h2 id="past-title" class="past-title" hidden>Past catch ups</h2>
+        <div id="past-list" class="past-list"></div>
+      </section>
+    </aside>
+  </main>
+
+  <script src="mock-lecture.js"></script>
+  <script src="sources.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
