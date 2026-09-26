@@ -40,7 +40,8 @@ curl -X POST http://127.0.0.1:8000/warmup
 
 Open **<http://127.0.0.1:8000/?source=python>** in Chrome, play the lecture in
 another Chrome tab, press Start, and share that tab **with "Also share tab
-audio"** ticked. `/?source=mock` runs the scripted demo
+audio"** ticked. For a lecture in the room, use **`/?source=python&audio=mic`** to listen to
+the microphone instead of a tab. `/?source=mock` runs the scripted demo
 with no hardware; `/debug/` is the diagnostics page.
 
 What each piece does, and where they meet:

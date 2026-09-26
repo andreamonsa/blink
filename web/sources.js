@@ -6,6 +6,8 @@
 //                   + real speech-to-text of the lecture tab + real summarizer.
 //                   Serve this page from the STT backend (uvicorn backend.app:app).
 //   &gaze=ws://host:port   override the gaze WebSocket URL
+//   &audio=mic      with ?source=python: listen to the microphone (lecture in
+//                   the room) instead of a Chrome tab (online lecture)
 //
 // Interfaces app.js expects:
 //   gaze.connect({ onZone, onStatus })
@@ -25,6 +27,7 @@ window.Blink = window.Blink || {};
   const params = new URLSearchParams(location.search);
   const SOURCE = params.get("source") || "mock";
   const GAZE_URL = params.get("gaze") || "ws://localhost:8765"; // gaze.py run --port default
+  const AUDIO = params.get("audio") === "mic" ? "mic" : "tab";
 
   // ------------------------------------------------------------ gaze (real)
   // Zachary's gaze.py is the WebSocket server; we are a client. Reconnects
@@ -139,7 +142,7 @@ window.Blink = window.Blink || {};
   // user gesture, and an import started inside the click could outlive it.
   const realSource = SOURCE === "python"
     ? import("/js/silentspecs-source.js").then((m) =>
-        m.createSilentSpecsSource({ gazeUrl: GAZE_URL }))
+        m.createSilentSpecsSource({ gazeUrl: GAZE_URL, audioSource: AUDIO }))
     : null;
 
   function realTranscript() {
@@ -154,9 +157,10 @@ window.Blink = window.Blink || {};
 
   function reportStartError(err) {
     console.error("speech-to-text failed to start", err);
-    alert("Couldn't capture the lecture audio.\n\n" +
-          'In the share dialog pick the lecture\'s Chrome tab and tick "Also share tab audio".' +
-          "\n\n(" + err.message + ")");
+    const hint = AUDIO === "mic"
+      ? "Allow microphone access for this page (address bar -> site settings)."
+      : 'In the share dialog pick the lecture\'s Chrome tab and tick "Also share tab audio".';
+    alert("Couldn't capture the lecture audio.\n\n" + hint + "\n\n(" + err.message + ")");
   }
 
   // ------------------------------------------------- summarizer (real, Louis)

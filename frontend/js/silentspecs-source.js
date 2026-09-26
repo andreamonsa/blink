@@ -31,6 +31,9 @@ export function createSilentSpecsSource({
   backendUrl = "",
   gazeUrl = DEFAULT_GAZE_URL,
   leadMs = 0,
+  // "tab" for an online lecture in another Chrome tab, "mic" for a lecture in
+  // the room (or a virtual device such as BlackHole).
+  audioSource = "tab",
   onStatus = () => {},
   AudioCaptureImpl = AudioCapture,
   connectGazeImpl = connectGaze,
@@ -143,9 +146,10 @@ export function createSilentSpecsSource({
       await loadConfig();
       fetch(`${backendUrl}/session/${store.sessionId}/reset`, { method: "POST" }).catch(() => {});
 
-      // Must stay inside the click that called start(): getDisplayMedia needs
-      // transient user activation.
-      await capture.startTabAudio();
+      // Must stay inside the click that called start(): both capture APIs
+      // need transient user activation.
+      if (audioSource === "mic") await capture.startMicrophone();
+      else await capture.startTabAudio();
 
       gaze = createGazeController({
         thresholdMs: serverConfig.away_threshold_ms ?? 2000,
