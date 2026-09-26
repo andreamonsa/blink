@@ -1,0 +1,49 @@
+INFO:     Started server process [89244]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+2026-09-26 15:17:57,901 INFO backend.summarizer_bridge: summarizer module loaded from /home/louisd/Documents/Personal_projects/BAINSA_Hackathon-main/main/summarizer.py
+INFO:     127.0.0.1:51392 - "GET /health HTTP/1.1" 200 OK
+2026-09-26 15:17:58,042 INFO backend.stt: loading whisper base.en (cpu/int8)
+2026-09-26 15:17:58,281 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/Systran/faster-whisper-base.en/revision/main "HTTP/1.1 200 OK"
+2026-09-26 15:17:58,578 INFO backend.stt: whisper loaded in 0.5s
+2026-09-26 15:17:58,612 INFO faster_whisper: Processing audio with duration 00:01.000
+2026-09-26 15:17:58,986 INFO backend.classifier: loading laya convaiinnovations/laya (subfolder=typed-decisions, device=auto)
+2026-09-26 15:18:01,300 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/convaiinnovations/laya/revision/main "HTTP/1.1 200 OK"
+Fetching 5 files:   0%|          | 0/5 [00:00<?, ?it/s]Fetching 5 files: 100%|██████████| 5/5 [00:00<00:00, 1116.22it/s]
+/home/louisd/Documents/Personal_projects/BAINSA_Hackathon-main/main/.venv/lib/python3.12/site-packages/laya/agent.py:928: RuntimeWarning: laya: this checkpoint ships invalid temperatures or values outside [0.5, 5]; using choice:11+=0.10058280825614929 -> 0.5. Treat confidence from the affected entries as uncalibrated.
+  return Agent(model_id_or_path, device=device, token=token, subfolder=subfolder, fast=fast,
+2026-09-26 15:18:03,661 INFO backend.classifier: laya loaded in 4.7s on cpu
+2026-09-26 15:18:04,066 INFO httpx: HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+2026-09-26 15:18:04,067 INFO silentspecs: warmup: whisper=0.40s laya=0.3471949100494385 summarizer=0.058240652084350586
+INFO:     127.0.0.1:51394 - "POST /warmup HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47354 - "GET /?source=python&audio=mic HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:47354 - "GET /styles.css HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:47366 - "GET /mock-lecture.js HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:47380 - "GET /sources.js HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:47382 - "GET /app.js HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:47354 - "GET /ruled.js HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:47354 - "GET /js/silentspecs-source.js HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:47382 - "GET /js/gaze-interface.js HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:47380 - "GET /js/gaze-websocket.js HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:47366 - "GET /js/recovery.js HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:47354 - "GET /js/audio-capture.js HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:47388 - "GET /js/store.js HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:47398 - "GET /js/session.js HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:47398 - "GET /js/missed-selector.js HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:43564 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43564 - "POST /session/s-muif1old-heof57/reset HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43564 - "GET /js/pcm-recorder.worklet.js HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:47874 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47874 - "POST /session/s-muif23gd-bxquyi/reset HTTP/1.1" 200 OK
+2026-09-26 15:19:34,908 INFO faster_whisper: Processing audio with duration 00:06.905
+2026-09-26 15:19:34,954 INFO faster_whisper: VAD filter removed 00:00.336 of audio
+2026-09-26 15:19:35,309 INFO backend.stt: transcribed 0 words in 0.55s
+2026-09-26 15:19:35,309 INFO silentspecs: window w1-muif28mr chunk 0 [4709, 11356] -> 0 of 0 words kept (0 total)
+INFO:     127.0.0.1:37948 - "POST /window/w1-muif28mr/chunk HTTP/1.1" 200 OK
+2026-09-26 15:19:35,313 INFO silentspecs: finalized window w1-muif28mr [4709, 11356] -> 0 words, 0 items
+INFO:     127.0.0.1:37948 - "POST /window/w1-muif28mr/finalize HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [89244]
