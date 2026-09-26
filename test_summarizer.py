@@ -131,6 +131,9 @@ def test_latency_is_realtime_friendly():
     elapsed = time.perf_counter() - t0
     assert elapsed < 8.0, f"too slow for real-time: {elapsed:.2f}s"
 
+def test_math_uses_dollar_delimiters():
+    out = summarize(MESSY_ASR_TEXT, max_words=40)
+    assert "\\(" not in out and "\\[" not in out, f"found non-$ delimiters: {out}"
 
 TESTS = [
     test_model_is_available,
@@ -139,6 +142,7 @@ TESTS = [
     test_messy_asr_text,
     test_long_text_respects_word_budget,
     test_latency_is_realtime_friendly,
+    test_math_uses_dollar_delimiters,
 ]
 
 

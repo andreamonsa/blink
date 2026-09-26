@@ -1,16 +1,16 @@
 {
   "meta": {
     "model": "qwen2.5:3b-instruct-q5_K_M",
-    "timestamp": "2026-09-26T11:52:59",
+    "timestamp": "2026-09-26T12:19:29",
     "python": "3.12.3"
   },
   "summary": {
-    "tests_passed": 6,
-    "tests_total": 6,
+    "tests_passed": 7,
+    "tests_total": 7,
     "samples": 4,
-    "avg_latency_seconds": 2.58,
-    "max_latency_seconds": 4.66,
-    "avg_compression_ratio": 3.87
+    "avg_latency_seconds": 3.55,
+    "max_latency_seconds": 4.55,
+    "avg_compression_ratio": 3.64
   },
   "tests": [
     {
@@ -29,25 +29,31 @@
       "test": "test_clean_text_basic",
       "status": "PASS",
       "detail": "",
-      "seconds": 2.31
+      "seconds": 4.88
     },
     {
       "test": "test_messy_asr_text",
       "status": "PASS",
       "detail": "",
-      "seconds": 2.02
+      "seconds": 3.03
     },
     {
       "test": "test_long_text_respects_word_budget",
       "status": "PASS",
       "detail": "",
-      "seconds": 4.65
+      "seconds": 11.59
     },
     {
       "test": "test_latency_is_realtime_friendly",
       "status": "PASS",
       "detail": "",
-      "seconds": 2.34
+      "seconds": 3.75
+    },
+    {
+      "test": "test_math_uses_dollar_delimiters",
+      "status": "PASS",
+      "detail": "",
+      "seconds": 3.11
     }
   ],
   "samples": [
@@ -55,45 +61,45 @@
       "name": "clean_biology",
       "max_words": 40,
       "input": "Photosynthesis is the process by which plants convert light energy into chemical energy. It takes place in the chloroplasts, primarily in the leaves. The overall reaction combines carbon dioxide and water to produce glucose and oxygen. Chlorophyll is the pigment that absorbs light, mostly in the blue and red wavelengths, which is why plants appear green. The process has two stages: the light-dependent reactions and the Calvin cycle.",
-      "output": "Photosynthesis converts light energy into glucose and oxygen, primarily occurring in chloroplasts of leaves. It involves light-dependent reactions and the Calvin cycle, with chlorophyll absorbing blue and red light.",
+      "output": "Photosynthesis converts light energy into chemical energy in chloroplasts, primarily leaves, producing glucose and oxygen from carbon dioxide and water. Chlorophyll absorbs blue and red light. It involves light-dependent reactions and the Calvin cycle.",
       "input_words": 68,
-      "output_words": 29,
+      "output_words": 34,
       "within_budget": true,
-      "compression_ratio": 2.34,
-      "latency_seconds": 1.63
+      "compression_ratio": 2.0,
+      "latency_seconds": 3.04
     },
     {
       "name": "messy_asr_calculus",
       "max_words": 40,
       "input": "okay so um where were we right so the the derivative of e to the x is just e to the x which is kind of the whole point of e um that's why it shows up everywhere so if you have e to the two x you use the chain rule and you get two e to the two x uh does that make sense yeah okay so the chain rule you just multiply by the derivative of the inside sorry can someone close the door thanks so the inside is two x derivative is two",
-      "output": "The derivative of \\(e^{2x}\\) is \\(2e^{2x}\\) using the chain rule. The derivative of \\(e^x\\) is \\(e^x\\).",
+      "output": "The derivative of $e^{2x}$ is $2e^{2x}$ using the chain rule, where the derivative of the inside function $2x$ is 2.",
       "input_words": 97,
-      "output_words": 16,
+      "output_words": 20,
       "within_budget": true,
-      "compression_ratio": 6.06,
-      "latency_seconds": 1.63
+      "compression_ratio": 4.85,
+      "latency_seconds": 2.94
     },
     {
       "name": "long_history",
       "max_words": 50,
       "input": "The French Revolution began in 1789 with the storming of the Bastille on July 14th. It was driven by a fiscal crisis, widespread hunger, and resentment toward the privileges of the aristocracy and clergy. The Estates-General was convened for the first time since 1614, and the Third Estate declared itself the National Assembly. In August 1789 the Assembly issued the Declaration of the Rights of Man and of the Citizen. The monarchy was abolished in 1792 and Louis XVI was executed in January 1793. The Reign of Terror followed under Robespierre, with roughly 17,000 official executions. It ended with Robespierre's own execution in July 1794, the Thermidorian Reaction. Napoleon Bonaparte seized power in 1799, effectively ending the revolutionary period. The French Revolution began in 1789 with the storming of the Bastille on July 14th. It was driven by a fiscal crisis, widespread hunger, and resentment toward the privileges of the aristocracy and clergy. The Estates-General was convened for the first time since 1614, and the Third Estate declared itself the National Assembly. In August 1789 the Assembly issued the Declaration of the Rights of Man and of the Citizen. The monarchy was abolished in 1792 and Louis XVI was executed in January 1793. The Reign of Terror followed under Robespierre, with roughly 17,000 official executions. It ended with Robespierre's own execution in July 1794, the Thermidorian Reaction. Napoleon Bonaparte seized power in 1799, effectively ending the revolutionary period. The French Revolution began in 1789 with the storming of the Bastille on July 14th. It was driven by a fiscal crisis, widespread hunger, and resentment toward the privileges of the aristocracy and clergy. The Estates-General was convened for the first time since 1614, and the Third Estate declared itself the National Assembly. In August 1789 the Assembly issued the Declaration of the Rights of Man and of the Citizen. The monarchy was abolished in 1792 and Louis XVI was executed in January 1793. The Reign of Terror followed under Robespierre, with roughly 17,000 official executions. It ended with Robespierre's own execution in July 1794, the Thermidorian Reaction. Napoleon Bonaparte seized power in 1799, effectively ending the revolutionary period.",
-      "output": "The French Revolution began in 1789 with the storming of the Bastille. It was driven by fiscal crisis, hunger, and aristocratic privileges. The Estates-General convened, the Third Estate declared the National Assembly, and the Declaration of the Rights of Man and of the Citizen was issued. The monarchy was abolished, Louis XVI executed, followed by the Reign of Terror. Robespierre's execution marked the end of the Terror, leading to Napoleon's rise in 1799 and the end of the revolutionary period.",
+      "output": "The French Revolution began in 1789 with the storming of the Bastille. It was driven by fiscal crisis, hunger, and aristocratic privileges. The Estates-General convened, the Third Estate declared the National Assembly, and the Declaration of the Rights of Man and of the Citizen was issued. The monarchy was abolished, Louis XVI executed, followed by the Reign of Terror. Robespierre's execution led to the Thermidorian Reaction, and Napoleon seized power in 1799, ending the revolutionary period.",
       "input_words": 357,
-      "output_words": 80,
+      "output_words": 76,
       "within_budget": true,
-      "compression_ratio": 4.46,
-      "latency_seconds": 4.66
+      "compression_ratio": 4.7,
+      "latency_seconds": 4.55
     },
     {
       "name": "messy_asr_cs",
       "max_words": 50,
       "input": "right so uh a hash table okay the idea is you have a key and you want to find the value really fast like constant time on average so you take the key you run it through a hash function which gives you an integer and you mod that by the size of the array and that's your index um the problem is collisions two keys same index so you either do chaining where each slot is a linked list or open addressing where you probe for the next free slot uh yeah question in the back no we'll cover load factor next time so worst case is O of n if everything collides but average is O of 1",
-      "output": "A hash table uses a hash function to map keys to array indices, resolving collisions through chaining or open addressing. Average lookup time is constant (O(1)), but worst case is linear (O(n)) if all keys hash to the same index. Load factor will be covered later.",
+      "output": "A hash table uses a hash function to map keys to array indices, resolving collisions with chaining or open addressing. Average lookup time is constant, but worst case is linear due to collisions. Load factor will be discussed next time.",
       "input_words": 120,
-      "output_words": 46,
+      "output_words": 40,
       "within_budget": true,
-      "compression_ratio": 2.61,
-      "latency_seconds": 2.42
+      "compression_ratio": 3.0,
+      "latency_seconds": 3.67
     }
   ]
 }
