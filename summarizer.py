@@ -1,4 +1,4 @@
-"""summarizer.py — Qwen2.5-3B via Ollama. Emits \( \) / \[ \] math for KaTeX."""
+r"""summarizer.py — Qwen2.5-3B via Ollama. Emits \( \) / \[ \] math for KaTeX."""
 import os
 import re
 

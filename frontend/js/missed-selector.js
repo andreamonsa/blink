@@ -1,7 +1,13 @@
 /**
  * Client-side mirror of backend/missed_selector.py.
+ *
+ * The backend already filters, but this runs again on whatever comes back
+ * before anything is stored or shown. The invariant -- that attended lecture
+ * text never becomes durable -- is the one thing in this product that must not
+ * depend on a single implementation being correct.
  */
 
+/** An away interval shorter than this is not a missed event at all. */
 export const DEFAULT_THRESHOLD_MS = 2000;
 
 const SENTENCE_END = [".", "?", "!"];
@@ -9,6 +15,10 @@ const HAS_ALNUM = /[\p{L}\p{N}]/u;
 
 export class InvalidAwayInterval extends Error {}
 
+/**
+ * Keep only words overlapping a valid away interval.
+ * A word survives when word.end_ms > awayStartMs AND word.start_ms < awayEndMs.
+ */
 export function selectMissedWords(words, awayStartMs, awayEndMs, thresholdMs = DEFAULT_THRESHOLD_MS) {
   if (awayEndMs < awayStartMs) {
     throw new InvalidAwayInterval(
@@ -26,6 +36,7 @@ export function isValidAwayWindow(awayStartMs, awayEndMs, thresholdMs = DEFAULT_
   return awayEndMs >= awayStartMs && awayEndMs - awayStartMs >= thresholdMs;
 }
 
+/** Rebuild the exact missed text. This is what must never be lost. */
 export function buildRawText(words) {
   return (words ?? [])
     .map((w) => (w.text ?? "").trim())
@@ -33,6 +44,7 @@ export function buildRawText(words) {
     .join(" ");
 }
 
+/** Drop words repeated by overlapping clips, keeping timeline order. */
 export function dedupeWords(words) {
   const seen = new Set();
   return [...(words ?? [])]
@@ -45,6 +57,11 @@ export function dedupeWords(words) {
     });
 }
 
+/**
+ * Group missed words into a few readable fragments.
+ * Splits only after sentence-final punctuation; keeps leading and trailing
+ * partial sentences, since a gaze boundary usually falls mid-sentence.
+ */
 export function fragmentMissedText(words, maxWordsPerFragment = null) {
   const fragments = [];
   let current = [];
@@ -74,6 +91,7 @@ export function fragmentMissedText(words, maxWordsPerFragment = null) {
   return fragments;
 }
 
+/** Compact-card order: priority DESC, then start_ms ASC. */
 export function sortForCard(items) {
   return [...(items ?? [])].sort(
     (a, b) => (b.priority ?? 1) - (a.priority ?? 1) || a.start_ms - b.start_ms

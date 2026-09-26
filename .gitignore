@@ -13,3 +13,6 @@ gaze_data_backup_*.csv
 synthetic/
 
 .DS_Store
+
+# run.sh logs
+.logs/

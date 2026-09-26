@@ -1,5 +1,14 @@
 /**
- * Session-wide missed transcript (memory only).
+ * Session-wide missed transcript, and the hand-off to the summarizer.
+ *
+ * Holds only what the exact word-overlap filter selected, so attended lecture
+ * text cannot reach it and therefore cannot reach the summarizer. Memory only:
+ * nothing is written to localStorage or anywhere else that survives the tab.
+ *
+ * Two ways for a teammate to consume it:
+ *   store.onMissedWindow(cb)   -- fires once per valid away window
+ *   store.getSessionMissed()   -- the whole SessionMissedTranscript
+ * The backend exposes the same shape at GET /session/{id}/missed.
  */
 
 import { buildRawText, dedupeWords } from "./missed-selector.js";
@@ -12,11 +21,16 @@ export class MissedStore {
     this._listeners = new Set();
   }
 
+  /** Subscribe to each new missed window. Returns an unsubscribe function. */
   onMissedWindow(callback) {
     this._listeners.add(callback);
     return () => this._listeners.delete(callback);
   }
 
+  /**
+   * Add a recovered window, merging it with any window it overlaps so a loose
+   * gaze debounce cannot make the summarizer see a sentence twice.
+   */
   addWindow(record) {
     if (!record || !record.raw_text) return null;
 
@@ -36,12 +50,14 @@ export class MissedStore {
       try {
         listener(merged, this.getSessionMissed());
       } catch (err) {
+        // A broken consumer must never break recovery.
         console.warn("missed-window listener threw:", err);
       }
     }
     return merged;
   }
 
+  /** Everything the student missed this session. The summarizer's input. */
   getSessionMissed() {
     const sentences = this.windows
       .flatMap((w) => w.items ?? [])

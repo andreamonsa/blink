@@ -1,5 +1,9 @@
 /**
- * Debug harness wiring the pieces together (the /debug page).
+ * Debug harness wiring the pieces together.
+ *
+ * Intentionally plain: the real UI belongs to a teammate. What this needs to
+ * prove is that the pipeline behaves -- what is captured, what is judged
+ * missed, what the classifier tagged it, and how long it took.
  */
 
 import { AudioCapture } from "./audio-capture.js";
@@ -22,6 +26,7 @@ const $ = (id) => document.getElementById(id);
 const capture = new AudioCapture({ bufferSeconds: 30 });
 const store = new MissedStore(newSessionId());
 let gaze = null;
+// Server-side settings from /health, so chunking matches the backend exactly.
 let serverConfig = {};
 let stopTimeline = null;
 const latencies = [];
@@ -83,6 +88,7 @@ function renderSession() {
       card.append(row);
     }
 
+    // ordinary_context is collapsed from the compact card, never deleted.
     const details = document.createElement("details");
     const summary = document.createElement("summary");
     summary.textContent = "Show everything I missed";
@@ -132,6 +138,7 @@ function buildGaze() {
   gaze = createGazeController({
     thresholdMs: 2000,
     onMissedWindow: (win) => recovery.recoverMissedWindow(win),
+    // Opens chunked flushing once an absence is confirmed (>= 2 s).
     onStateChange: (state, awayStartMs) => {
       setGazeState(state);
       recovery.onGazeState(state, awayStartMs);
@@ -141,6 +148,7 @@ function buildGaze() {
       recovery.abandonWindow(win);
     },
   });
+  // The gaze teammate's tracker replaces this by calling the same two methods.
   window.silentSpecsGaze = gaze;
   attachKeyboardGaze(gaze);
 }
@@ -181,7 +189,7 @@ async function start(kind) {
   latencies.length = 0;
   try {
     await fetch(`/session/${store.sessionId}/reset`, { method: "POST" });
-  } catch { /* backend may not be up yet */ }
+  } catch { /* the backend may not be up yet; recovery will report it */ }
 
   try {
     const info =
@@ -214,6 +222,8 @@ async function stop() {
         `silent ${(final.silentFraction * 100).toFixed(1)}% of blocks`);
   }
   stopTimeline?.();
+  // Finalize an open absence rather than discard it: stopping while away
+  // must not lose what was missed.
   if (recovery.hasOpenWindow()) {
     log("finalizing the absence that was still open");
     await recovery.stop();

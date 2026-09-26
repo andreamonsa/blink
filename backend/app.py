@@ -20,12 +20,14 @@ from typing import Optional
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from typing import List
 from fastapi.staticfiles import StaticFiles
 
 from backend import classifier, config, stt, summarizer_bridge
 from backend.pipeline import build_missed_window_record
 from backend.schemas import (
+    TranscriptWord,
     MissedWindowRecord,
     SessionMissedTranscript,
     TranscribeResponse,
@@ -159,6 +161,76 @@ def recover(
         record.processing_time_s or 0.0,
         record.classifier_ok,
     )
+    return record
+
+
+@app.post("/live/chunk")
+def live_chunk(
+    audio: UploadFile = File(...),
+    clip_start_ms: int = Form(0),
+    chunk_start_ms: int = Form(...),
+    chunk_end_ms: int = Form(...),
+    vad_filter: bool = Form(True),
+) -> dict:
+    """Transcribe one slice of the live lecture and return its words.
+
+    Stateless on purpose: nothing is stored here. The words go back to the
+    page, which shows them in the live transcript and keeps them in memory
+    only. Words are assigned to the slice by start time, so consecutive slices
+    tile with no duplicate and no gap.
+    """
+    path = _save_upload(audio)
+    try:
+        _segments, words, _text, elapsed = stt.transcribe_clip(
+            path, clip_start_ms=clip_start_ms, vad_filter=vad_filter
+        )
+    except Exception as exc:
+        log.exception("live transcription failed")
+        raise HTTPException(status_code=500, detail=f"transcription failed: {exc}")
+    finally:
+        os.unlink(path)
+
+    selected = assign_chunk_words(
+        words, chunk_start_ms, chunk_end_ms, is_first=False, is_last=False
+    )
+    return {"words": selected, "processing_time_s": elapsed}
+
+
+class WindowWords(BaseModel):
+    away_start_ms: int
+    away_end_ms: int
+    words: List[TranscriptWord] = Field(default_factory=list)
+
+
+@app.post("/session/{session_id}/window", response_model=MissedWindowRecord)
+def session_window(
+    session_id: str, body: WindowWords, background: BackgroundTasks
+) -> MissedWindowRecord:
+    """Record a missed window from words the live transcript already has.
+
+    Only the words overlapping the away window are kept: the exact selector
+    runs here, on the server, whatever the page sent. So the session store,
+    Laya and the summarizer still only ever see what the student missed, even
+    though the page displays the whole lecture.
+    """
+    if body.away_end_ms < body.away_start_ms:
+        raise HTTPException(status_code=400, detail="away_end_ms precedes away_start_ms")
+
+    t0 = time.time()
+    record = build_missed_window_record(
+        [w.model_dump() for w in body.words],
+        away_start_ms=body.away_start_ms,
+        away_end_ms=body.away_end_ms,
+        processing_time_s=None,
+    )
+    record.processing_time_s = time.time() - t0
+
+    if record.raw_text:
+        record = store.append(session_id, record)
+        background.add_task(_notify_summarizer, session_id, record)
+
+    log.info("live window [%d, %d] -> %d words, %d items",
+             record.start_ms, record.end_ms, len(record.words), len(record.items))
     return record
 
 

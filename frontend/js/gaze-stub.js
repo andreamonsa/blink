@@ -1,9 +1,14 @@
 /**
- * Stand-in gaze driver for testing (hold Space = away).
+ * Stand-in gaze driver for testing, until the gaze teammate's tracker lands.
+ *
+ * It calls exactly the same two methods the real tracker will call --
+ * gaze.awayStart(ms) and gaze.returned(ms) -- so nothing downstream has to
+ * change when it is swapped out.
  */
 
 import { sessionNowMs } from "./session.js";
 
+/** Hold a key to look away, release to look back. */
 export function attachKeyboardGaze(gaze, { key = " " } = {}) {
   let down = false;
 
@@ -29,6 +34,10 @@ export function attachKeyboardGaze(gaze, { key = " " } = {}) {
   };
 }
 
+/**
+ * Replay a scripted list of {awayAtMs, durationMs} against the session clock.
+ * This is how the flicker and boundary trials are run reproducibly.
+ */
 export function playGazeTimeline(gaze, events, { onEvent = () => {} } = {}) {
   const timers = [];
   for (const event of events) {
@@ -49,6 +58,7 @@ export function playGazeTimeline(gaze, events, { onEvent = () => {} } = {}) {
   return () => timers.forEach(clearTimeout);
 }
 
+/** Ten short glances: expect zero cards and zero durable text. */
 export const FLICKER_TIMELINE = Array.from({ length: 10 }, (_, i) => ({
   awayAtMs: 2000 + i * 2500,
   durationMs: 500 + (i % 3) * 500,
