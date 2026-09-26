@@ -1,8 +1,4 @@
-# Silent Specs — speech-to-text + missed-information subsystem
-
-Our slice of Silent Specs: lecture audio in, and **only the speech the student
-missed while looking away** out — timestamped, tagged, and accumulated for the
-summarizer.
+# Blink subsystem
 
 The rule everything here serves:
 
