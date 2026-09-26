@@ -17,8 +17,9 @@ python3 -m http.server 8000 --directory web
 
 | File | What it does |
 |---|---|
-| `index.html` / `styles.css` | Layout, from the Figma |
+| `index.html` / `styles.css` | Layout and the "Editorial notebook" design |
 | `app.js` | UI: transcript, scroll-back, "missed" highlighting, catch-up cards, buttons |
+| `ruled.js` | Keeps text sitting exactly on the ruled lines (visual only) |
 | `sources.js` | **The only place teammates' code plugs in**: gaze, transcript, summarizer |
 | `mock-lecture.js` | Scripted lecture for demo mode |
 
@@ -43,4 +44,8 @@ The card accepts `{ summary: string | string[], priorities?: string[] }`. The pl
 ## LaTeX
 
 Formulas are rendered with KaTeX (loaded from a CDN) using the `\( \)`, `\[ \]` and `$$ $$` delimiters, which is what
-`summarizer.py` produces. Single `$` is ignored on purpose, so "$5" in speech isn't treated as math. Lines are typeset only once they're final, since interim text can contain half a formula. If KaTeX can't load, formulas show as raw text.
+`summarizer.py` produces. Single `$` is ignored on purpose, so "$5" in speech isn't treated as math. Formulas render while a line is still being spoken. A formula that's only half spoken, with no closing `\)` yet, stays as plain text until it's complete. If KaTeX can't load, formulas show as raw text.
+
+## Ruled lines
+
+`ruled.js` lines text up with the paper's rules. Any container that defines `--lh` (the spacing between rules) and `--rule-y` (the position of the first rule) gets each text block's height rounded up to a whole number of rules, and its first baseline nudged onto a rule. This works across different font sizes and after tall formulas. If you change fonts or sizes in `styles.css`, keep the `line-height` of ruled text equal to `var(--lh)`.

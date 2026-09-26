@@ -97,7 +97,9 @@
       body.textContent = text;
       line.el.classList.toggle("interim", !final);
       if (state.zone === "away") line.el.classList.add("missed");
-      if (final) renderMath(body); // interim text may hold half a formula
+      // Safe on interim text too: auto-render only typesets closed \( \) pairs
+      // and leaves a half-spoken formula as plain text until it's complete.
+      renderMath(body);
     });
   }
 

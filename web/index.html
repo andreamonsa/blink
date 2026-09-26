@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Blink</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Roboto+Mono:wght@400&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap">
   <!-- KaTeX renders the LaTeX that speech-to-text / summarizer.py emit. If it
        fails to load (offline), formulas simply stay as raw text. -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
@@ -15,28 +15,31 @@
 </head>
 <body>
   <main class="frame">
-    <!-- Left: live transcript -->
+    <!-- Left: live transcript on ruled paper -->
     <section class="transcript-col" aria-labelledby="transcript-title">
       <header class="transcript-head">
-        <h1 id="transcript-title">Real time transcript</h1>
+        <div>
+          <p class="kicker">Blink · Lecture notes · <span class="today"></span></p>
+          <h1 id="transcript-title">Real time transcript</h1>
+        </div>
         <div class="pills">
           <span id="live-pill" class="pill">Paused</span>
           <span id="gaze-pill" class="pill">Eye tracker…</span>
         </div>
       </header>
 
-      <div class="transcript-wrap">
+      <div class="paper">
         <div id="transcript" class="transcript" role="log" aria-live="off" tabindex="0">
           <p id="transcript-empty" class="empty">Press <strong>start</strong> to begin live captions.</p>
         </div>
         <button id="jump-live" class="jump-live" hidden>Back to live ↓</button>
       </div>
 
-      <div class="controls">
-        <button id="btn-start" class="round-btn" aria-pressed="false">start</button>
-        <button id="btn-summary" class="round-btn">summary</button>
-      </div>
-      <p id="hint" class="hint"></p>
+      <footer class="controls">
+        <button id="btn-start" class="btn btn-ink" aria-pressed="false">start</button>
+        <button id="btn-summary" class="btn btn-outline">summary</button>
+        <p id="hint" class="hint"></p>
+      </footer>
     </section>
 
     <!-- Right: catch-up card + history -->
@@ -49,8 +52,14 @@
     </aside>
   </main>
 
+  <script>
+    document.querySelectorAll(".today").forEach((el) => {
+      el.textContent = new Date().toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
+    });
+  </script>
   <script src="mock-lecture.js"></script>
   <script src="sources.js"></script>
   <script src="app.js"></script>
+  <script src="ruled.js"></script>
 </body>
 </html>
