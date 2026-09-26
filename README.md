@@ -9,6 +9,9 @@ looking somewhere else, the edges of your screen light up.
 
 Everything runs on your own laptop. No audio or video goes to the cloud.
 
+<img width="1187" height="624" alt="Screenshot 2026-09-26 at 17 27 59" src="https://github.com/user-attachments/assets/1542736c-d43f-441d-8e36-ca9995fd4262" />
+
+
 ---
 
 ## The problem
