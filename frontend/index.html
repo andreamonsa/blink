@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Silent Specs &mdash; STT debug harness</title>
+<style>
+  :root {
+    --bg: #11131a; --panel: #191c26; --line: #2a2f3d;
+    --ink: #e6e9f2; --muted: #8b93a7;
+    --q: #f0a35e; --i: #6fd1a0; --d: #7aa7ff; --o: #6b7288;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px; background: var(--bg); color: var(--ink);
+    font: 14px/1.5 ui-sans-serif, -apple-system, "SF Pro Text", system-ui, sans-serif;
+  }
+  h1 { font-size: 18px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .grid { display: grid; grid-template-columns: 1fr 380px; gap: 20px; align-items: start; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+  .panel + .panel { margin-top: 16px; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;
+       color: var(--muted); margin: 0 0 12px; font-weight: 600; }
+  button {
+    background: #262b38; color: var(--ink); border: 1px solid var(--line);
+    border-radius: 7px; padding: 7px 13px; font: inherit; cursor: pointer;
+  }
+  button:hover:not(:disabled) { background: #2f3546; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .row + .row { margin-top: 10px; }
+  .muted { color: var(--muted); }
+  code, pre { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; }
+  pre { background: #0d0f15; border: 1px solid var(--line); border-radius: 7px;
+        padding: 10px; overflow: auto; max-height: 260px; white-space: pre-wrap; margin: 8px 0 0; }
+  .state { font-weight: 600; padding: 2px 9px; border-radius: 20px; background: #262b38; }
+  .state.LOOKING { color: var(--i); }
+  .state.POTENTIAL_AWAY { color: var(--q); }
+  .state.CONFIRMED_AWAY { color: #ff7b7b; }
+  .card { border: 1px solid var(--line); border-radius: 9px; padding: 13px;
+          margin-bottom: 12px; background: #0f121a; }
+  .card header { display: flex; justify-content: space-between; gap: 12px;
+                 align-items: baseline; margin-bottom: 10px; }
+  .item { display: grid; grid-template-columns: 150px 1fr; gap: 10px;
+          padding: 6px 0; border-top: 1px solid var(--line); }
+  .item.collapsed { opacity: 0.5; }
+  .tag { font-size: 11px; font-weight: 600; letter-spacing: 0.02em; }
+  .kind-question_to_you .tag { color: var(--q); }
+  .kind-instruction_change .tag { color: var(--i); }
+  .kind-decision_reason .tag { color: var(--d); }
+  .kind-ordinary_context .tag, .kind-unclassified .tag { color: var(--o); }
+  details { margin-top: 10px; }
+  summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+  #log { max-height: 220px; overflow: auto; font-family: ui-monospace, Menlo, monospace;
+         font-size: 11.5px; color: var(--muted); }
+  #log div { padding: 1px 0; }
+  dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; }
+  dt { color: var(--muted); } dd { margin: 0; }
+  .meter { font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; color: var(--muted); }
+  .meter.ok { color: var(--i); }
+  .meter.warn { color: var(--q); }
+  .meter.bad { color: #ff7b7b; font-weight: 600; }
+  kbd { background: #262b38; border: 1px solid var(--line); border-bottom-width: 2px;
+        border-radius: 4px; padding: 1px 5px; font-size: 11px; }
+</style>
+</head>
+<body>
+  <h1>Silent Specs &mdash; speech-to-text debug harness</h1>
+  <p class="sub">
+    Only speech from valid gaze-away windows (&ge;&nbsp;2&nbsp;s) is ever transcribed, stored or classified.
+  </p>
+
+  <div class="grid">
+    <div>
+      <section class="panel">
+        <h2>Session</h2>
+        <div class="row">
+          <button id="warmupBtn">Warm models</button>
+          <button id="tabBtn">Capture Chrome tab audio</button>
+          <button id="micBtn">Capture microphone</button>
+          <input type="file" id="file" accept="audio/*">
+          <button id="fileBtn">Play file</button>
+          <button id="stopBtn" disabled>Stop</button>
+        </div>
+        <div class="row">
+          <span>Gaze: <span id="gazeState" class="state">idle</span></span>
+          <span class="muted">hold <kbd>SPACE</kbd> to look away</span>
+          <button id="flickerBtn">Run flicker test</button>
+        </div>
+        <div class="row muted"><span id="health">checking backend&hellip;</span></div>
+        <div class="row">
+          <span class="muted">Capture:</span>
+          <span id="capture" class="meter">not capturing</span>
+        </div>
+        <div class="row muted">
+          <span>Source: <span id="source">none</span></span>
+          <span>&middot; Latency: <span id="latency">&mdash;</span></span>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Recovery cards</h2>
+        <div id="cards"></div>
+      </section>
+    </div>
+
+    <div>
+      <section class="panel">
+        <h2>Online lecture on macOS</h2>
+        <p class="muted" style="margin-top:0">
+          Play the lecture in a <strong>Chrome tab</strong>, click
+          <em>Capture Chrome tab audio</em>, choose that tab and tick
+          <strong>&ldquo;Also share tab audio&rdquo;</strong>.
+        </p>
+        <p class="muted">
+          Sharing the entire screen with audio is not supported on macOS, and
+          Safari and Firefox offer no tab audio. For a lecture in the Zoom or
+          Teams desktop app, route output through a virtual device such as
+          BlackHole and capture it as a microphone.
+        </p>
+      </section>
+
+      <section class="panel">
+        <h2>Session missed transcript</h2>
+        <dl>
+          <dt>Windows</dt><dd id="windowCount">0</dd>
+          <dt>Sentences</dt><dd id="sentenceCount">0</dd>
+        </dl>
+        <div class="row"><button id="copyBtn">Copy summarizer payload</button></div>
+        <pre id="summarizerPayload">{}</pre>
+      </section>
+
+      <section class="panel">
+        <h2>Log</h2>
+        <div id="log"></div>
+      </section>
+    </div>
+  </div>
+
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>

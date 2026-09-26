@@ -1,1 +1,15 @@
-gaze_data_backup_125606.csv
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Secrets (summarizer)
+.env
+
+# Eye tracker
+gaze_data_backup_*.csv
+
+# Voice-to-text: generated test audio (tools/generate_synthetic_audio.py)
+synthetic/
+
+.DS_Store
