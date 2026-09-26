@@ -58,9 +58,26 @@ What each piece does, and where they meet:
 | `gaze.py` | The teammate's eye tracker, run as its own process. |
 | `backend/summarizer_bridge.py` | Runs `summarizer.py`. Card priorities come from Laya tags, so they still appear if Ollama is down. |
 
-**The transcript pane only ever shows missed speech.** The teammate's mock
-streamed the whole lecture; CLAUDE.md's invariant forbids attended speech from
-being transcribed or stored, so lines appear when the student looks back.
+**Live transcript.** By default the transcript pane shows everything said in
+the lecture, a few seconds behind, transcribed in 4 s slices (`frontend/js/live.js`
+and `POST /live/chunk`). It is display-only: the words stay in the page's memory
+and the server stores nothing from it. When the student looks away, only the
+words overlapping that window are sent to `POST /session/{id}/window`, which
+applies the exact word filter again on the server before Laya, the session store
+or the summarizer see anything. So the missed-only guarantee still holds for
+everything that is kept, classified or summarised.
+
+Add **`&live=0`** for the strict mode from CLAUDE.md, where attended speech is
+never transcribed at all and lines appear only when the student looks back.
+Microphone instead of a tab (a professor speaking live in the room):
+**`&audio=mic`**. A panel at the bottom right lists the microphones Chrome can
+see (click "Consenti il microfono" once to reveal their names), so an external
+USB or conference microphone can be chosen; the choice is remembered, and
+`&mic=usb` pre-selects the first device whose name contains "usb". Echo
+cancellation and noise suppression are off in this mode (they would remove a
+lecture played from the laptop's own speakers); automatic gain stays on to lift
+a distant voice. For a distant speaker, `WHISPER_MODEL=small.en` is noticeably
+more accurate than the default `base.en`.
 
 ### Things the integration had to handle
 
