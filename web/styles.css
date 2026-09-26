@@ -94,6 +94,8 @@ h1 { margin: 0; font: 500 clamp(32px, 3.6vw, 46px)/1.05 "Newsreader", Georgia, s
 }
 .line.missed .line-time { color: var(--ochre-ink); }
 .line.missed .line-time::before { content: "● "; font-size: 8px; vertical-align: 1px; }
+/* Say it in words too, not only in colour: the line was spoken while looking away. */
+.line.missed .line-time::after { content: " · while you looked away"; font-size: 0.85em; font-style: italic; }
 .line.flash { animation: flash 1.8s ease-out; }
 @keyframes flash { 0%, 35% { background: rgba(140, 47, 57, 0.08); } 100% { background: transparent; } }
 

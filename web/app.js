@@ -99,7 +99,11 @@
       // A source that knows when each line was spoken says so with `missed`.
       // Otherwise (the mock) fall back to whether we are away as it arrives,
       // which is wrong for a source whose text lags the speech.
-      if (missed === true || (missed === undefined && state.zone === "away")) line.el.classList.add("missed");
+      if (missed === true || (missed === undefined && state.zone === "away")) {
+        line.el.classList.add("missed");
+        // The line stays in the transcript; this only says when it was spoken.
+        line.el.title = "Said while you were looking away";
+      }
       // Safe on interim text too: auto-render only typesets closed \( \) pairs
       // and leaves a half-spoken formula as plain text until it's complete.
       renderMath(body);
