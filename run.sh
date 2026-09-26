@@ -4,6 +4,7 @@
 #   ./run.sh                    lecture heard through the microphone (default)
 #   BLINK_AUDIO=tab ./run.sh    online lecture: capture a Chrome tab's audio
 #   BLINK_LIVE=0 ./run.sh       strict mode: only what was missed is transcribed
+#   SUMMARIZER_MODEL=qwen2.5:1.5b-instruct-q5_K_M ./run.sh   weaker laptop
 cd "$(dirname "$0")"
 PY=.venv/bin/python
 AUDIO="${BLINK_AUDIO:-mic}"
@@ -49,10 +50,18 @@ curl -s -X POST localhost:8000/warmup >/dev/null
 sleep 2
 kill -0 "$GAZE_PID" 2>/dev/null || echo "WARNING: the eye tracker stopped, see $LOGS/gaze.log (camera permission? try --camera 1)"
 
-# open on macOS, xdg-open on Linux, otherwise just print the address
-if command -v open >/dev/null 2>&1; then open "$URL"
-elif command -v xdg-open >/dev/null 2>&1; then xdg-open "$URL" >/dev/null 2>&1
-else echo "open $URL"; fi
+# 5. Open in a Chromium-based browser (tab audio + AudioWorklet need it; Firefox can't share tab audio)
+opened=0
+for b in google-chrome google-chrome-stable chromium chromium-browser brave-browser microsoft-edge; do
+  if command -v "$b" >/dev/null 2>&1; then "$b" --new-window "$URL" >/dev/null 2>&1 & opened=1; break; fi
+done
+if [ "$opened" = 0 ]; then
+  if [ "$(uname)" = "Darwin" ] && open -Ra "Google Chrome" 2>/dev/null; then open -a "Google Chrome" "$URL"
+  elif command -v open >/dev/null 2>&1; then open "$URL"
+  elif command -v xdg-open >/dev/null 2>&1; then xdg-open "$URL" >/dev/null 2>&1
+  else echo "open $URL"; fi
+  echo "NOTE: Chrome/Chromium not found; opened in the default browser. Tab-audio mode needs Chrome."
+fi
 
 echo "Blink is running at $URL"
 echo "Logs in $LOGS/.  Ctrl+C to stop."

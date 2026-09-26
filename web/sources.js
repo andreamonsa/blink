@@ -311,14 +311,16 @@ window.Blink = window.Blink || {};
       } else {
         line1 = "Audio ok";
       }
-      const bar = "\u2588".repeat(Math.min(12, Math.round(h.lastLevel * 40))).padEnd(12, "\u00b7");
+      const bar = "\u2588".repeat(Math.min(12, Math.round((h.lastLevel ?? 0) * 40))).padEnd(12, "\u00b7");
+
       const live = h.live;
       const liveLine = !live ? "" : live.slices === 0
         ? `\nPrimo testo tra ~${Math.max(0, 7 - secs)} s (trascrive a blocchi di ${h.chunkMs / 1000} s)`
         : `\nBlocchi trascritti: ${live.slices} · parole: ${live.words} · ultimo: ${live.lastWords} parole` +
           (live.lastWords === 0 ? " (nessun parlato rilevato)" : "") + (live.errors ? ` · errori: ${live.errors}` : "");
       badge.style.color = color;
-      badge.textContent = `\u{1F399} ${h.device || "?"}\n${bar} livello ${h.peakLevel.toFixed(3)}\n${line1}${line2 ? "\n" + line2 : ""}${liveLine}`;
+      badge.textContent = `\u{1F399} ${h.device || "?"}\n${bar} livello ${(h.peakLevel ?? 0).toFixed(3)}\n${line1}${line2 ? "\n" + line2 : ""}${liveLine}`;
+
     };
     paint();
     badgeTimer = setInterval(paint, 500);
