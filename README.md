@@ -1,432 +1,206 @@
-# Blink subsystem
+# Blink
 
-The rule everything here serves:
+**Captions that notice when you look away.**
 
-> After the user looks back, the durable transcript contains only the words
-> spoken during valid gaze-away windows, never the surrounding attended
-> lecture. Laya may rank and tag that missed text, but may never cause missed
-> text to be lost.
+Blink is a live-caption app for deaf and hard-of-hearing students. It uses your
+laptop's webcam to see when your eyes leave the captions, and when you look back
+it tells you what you missed. If the professor says your name while you're
+looking somewhere else, the edges of your screen light up.
 
-Two teammate-owned pieces plug in at the edges: the **gaze tracker** calls in,
-the **summarizer** reads out. Both contracts are documented below.
-
----
-
-## Quick start
-
-```bash
-python3 -m venv .venv && .venv/bin/python -m pip install -r requirements.txt
-./run.sh                    # lecture heard through the microphone
-BLINK_AUDIO=tab ./run.sh    # online lecture: capture a Chrome tab's audio
-BLINK_LIVE=0 ./run.sh       # strict mode: transcribe only what was missed
-```
-
-`run.sh` starts Ollama (if installed), the eye tracker and the backend, warms
-the models and opens the app. It works without Ollama (no written summaries, but
-priorities and the exact words still appear) and prints a warning if the eye
-tracker cannot open the camera. Logs go to `.logs/`. The first time, macOS asks
-for camera access for the terminal you ran it from.
-
-## Running the whole team's system
-
-On `main` every piece lives in this repo. On a machine with
-[Ollama](https://ollama.com) installed:
-
-```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt
-ollama pull qwen2.5:3b-instruct-q5_K_M        # the summarizer's model, ~2.3 GB
-.venv/bin/python tools/generate_synthetic_audio.py   # test fixtures (macOS only)
-```
-
-Then three processes, all from the repo root:
-
-```bash
-ollama serve                                         # 1. summarizer model
-.venv/bin/python gaze.py run --no-preview            # 2. eye tracker, ws://localhost:8765
-.venv/bin/python -m uvicorn backend.app:app --port 8000   # 3. STT + Laya + summarizer + UI
-```
-
-Warm all three models once so the first card isn't a cold start:
-
-```bash
-curl -X POST http://127.0.0.1:8000/warmup
-```
-
-Open **<http://127.0.0.1:8000/?source=python>** in Chrome, play the lecture in
-another Chrome tab, press Start, and share that tab **with "Also share tab
-audio"** ticked. For a lecture in the room, use **`/?source=python&audio=mic`** to listen to
-the microphone instead of a tab. `/?source=mock` runs the scripted demo
-with no hardware; `/debug/` is the diagnostics page.
-
-What each piece does, and where they meet:
-
-| | |
-|---|---|
-| `gaze.py` | Publishes `away` / `panel` transitions (wall-clock epoch ms) over a WebSocket. Has no minimum away duration. |
-| `frontend/js/gaze-websocket.js` | Our second client of that socket. Converts timestamps to the monotonic session clock and applies the 2 s rule. Ignores the snapshot `gaze.py` sends on every connect. |
-| `frontend/js/recovery.js` | Flushes 20 s chunks while the student is still away, the rest on return. |
-| `backend/` | Whisper → exact word-overlap selection → Laya → session store. |
-| `frontend/js/silentspecs-source.js` | Feeds the web app **only missed lines**, one per Laya fragment. |
-| `web/` | The teammate's UI, unchanged apart from `sources.js` and a 7-line patch to `createCatchup`. |
-| `summarizer.py` | The teammate's summarizer, imported by the backend from the repo root. |
-| `gaze.py` | The teammate's eye tracker, run as its own process. |
-| `backend/summarizer_bridge.py` | Runs `summarizer.py`. Card priorities come from Laya tags, so they still appear if Ollama is down. |
-
-**Live transcript.** By default the transcript pane shows everything said in
-the lecture, a few seconds behind, transcribed in 4 s slices (`frontend/js/live.js`
-and `POST /live/chunk`). It is display-only: the words stay in the page's memory
-and the server stores nothing from it. When the student looks away, only the
-words overlapping that window are sent to `POST /session/{id}/window`, which
-applies the exact word filter again on the server before Laya, the session store
-or the summarizer see anything. So the missed-only guarantee still holds for
-everything that is kept, classified or summarised.
-
-Add **`&live=0`** for the strict mode from CLAUDE.md, where attended speech is
-never transcribed at all and lines appear only when the student looks back.
-Microphone instead of a tab (a professor speaking live in the room):
-**`&audio=mic`**. A panel at the bottom right lists the microphones Chrome can
-see (click "Consenti il microfono" once to reveal their names), so an external
-USB or conference microphone can be chosen; the choice is remembered, and
-`&mic=usb` pre-selects the first device whose name contains "usb". Echo
-cancellation and noise suppression are off in this mode (they would remove a
-lecture played from the laptop's own speakers); automatic gain stays on to lift
-a distant voice. For a distant speaker, `WHISPER_MODEL=small.en` is noticeably
-more accurate than the default `base.en`.
-
-### Things the integration had to handle
-
-- **Two clocks.** `gaze.py` and the web app use wall-clock epoch ms; audio is
-  on `performance.now()`. Conversion is done *relative to now*, so the wall
-  clock only measures a gaze event's age (a few ms). An NTP step or sleep/wake
-  earlier in the lecture therefore cannot shift later windows.
-- **A race.** The web app builds its card the moment `gaze.py` reports a
-  return, about a second before the words exist, and its gaze socket and ours
-  deliver in no guaranteed order. `waitForWindow(from, to)` is keyed on
-  `gaze.py`'s `t`, which both sockets receive identically, and resolves to the
-  exact ids of that window's lines.
-- **Long absences.** Chunks are tiled by start time at interior edges and by
-  the overlap rule at the outer edges, so the union is word-for-word what a
-  single clip would give (`tests/test_window_buffer.py`). The server also
-  refuses to count a time range twice, whatever bounds a client sends.
-- **Background-tab throttling.** Our page sits in the background while the
-  student watches the lecture, and Chrome can run its timers once a minute. The
-  return path drains every whole chunk itself rather than trusting the timer.
-- **Nothing but missed text reaches the LLM.** `/session/{id}/summarize` takes a
-  time range, never text, and reads the windows from the session store.
-
-### Notes on the teammates' modules
-
-- The committed `gaze_model.pkl` was trained on one person's face, camera and
-  screen. Anyone else needs `python gaze.py collect` then `python gaze.py train`.
-- `gaze.py` must run from the repo root (its model paths are relative) and with
-  `--no-preview`; the OpenCV window otherwise throttles its event loop.
-- The `web` branch's own `gaze.py` still ends in a stray `r` (a `SyntaxError`);
-  `main` carries the working copy from the `eyetracker` branch.
-
-### Memory: the full stack is tight on an 8 GB laptop
-
-Whisper and Laya need roughly 2 GB together; Ollama's 3B model needs about
-2.5 GB more; Chrome and `gaze.py` add to that. On the demo laptop, with other
-apps open, swap reached 14 GB and a catch-up card took 5–14 s instead of about
-1 s, because the models kept paging each other out -- Laya alone classifies 8
-fragments in 0.7 s when its pages are resident. Before demoing: close other
-apps, or run Ollama on a second machine (`OLLAMA_HOST=...`), or set
-`LAYA_ENABLED=0` (cards then show exact words without priorities).
+Everything runs on your own laptop. No audio or video goes to the cloud.
 
 ---
 
-## Setup
+## The problem
 
-```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt
+In a lecture, a hearing student can look at the board, write notes and still
+follow what the professor is saying. A deaf student can't. They read the
+captions to know what's being said, so every time they look up at the board,
+down at their notes or at the professor, the captions keep going without them.
 
-# One-off: cache the models (~1 GB). Needed once; afterwards everything is offline.
-.venv/bin/python -c "
-from faster_whisper import WhisperModel; WhisperModel('base.en', device='cpu', compute_type='int8')
-import laya; laya.load('convaiinnovations/laya', subfolder='typed-decisions')"
+Scrolling back to find what they missed means missing what's being said now.
+Then they fall behind again, and the loop repeats.
 
-.venv/bin/python tools/generate_synthetic_audio.py   # test fixture (macOS `say`)
-```
+Blink breaks that loop.
 
-## Run
+## What it does
 
-```bash
-.venv/bin/python -m uvicorn backend.app:app --port 8000
-```
+- **Live transcript.** Everything the professor says appears on the left, a few
+  seconds behind. You can scroll back at any time. Formulas show up as real
+  maths, not code.
+- **Catch-up card.** When you look back at the screen, a card on the right tells
+  you what you missed. It puts the important things first: a question aimed at
+  you, a changed deadline, a decision. Below that is a short summary, and the
+  exact words are one click away.
+- **Glare.** Type your name in the box at the top. If someone says it while
+  you're not looking at the screen, the edges of the screen glow. Deaf people
+  often have sharper peripheral vision, so you notice the glow even while
+  you're looking at the board. A small notification shows exactly what was said.
+  The glow stops as soon as you look back.
+- **Missed lines are marked.** Lines spoken while you were looking away are
+  highlighted, so you can see at a glance which parts you still need to read.
 
-Open <http://127.0.0.1:8000>, click **Warm models**, pick an audio source, then
-hold <kbd>SPACE</kbd> to simulate looking away.
+## A lecture with Blink
 
-**Warm the models before demoing.** Cold start is ~7 s for Laya; warm it once
-and recovery lands in well under a second.
-
----
-
-## Capturing an online lecture (macOS)
-
-Play the lecture in a **Chrome tab**, click *Capture Chrome tab audio*, select
-that tab, and tick **"Also share tab audio"**.
-
-| | |
-|---|---|
-| Chrome, share a **tab** + tab audio | works |
-| Chrome, share **entire screen** + audio | not supported on macOS (Windows/ChromeOS only) |
-| Safari / Firefox | no tab audio on macOS at all |
-| Zoom / Teams **desktop app** | not a browser tab — route output through a virtual device (e.g. BlackHole) and capture it as a microphone |
-
-`getDisplayMedia` cannot be audio-only, so a video track is requested and then
-never read.
-
----
-
-## Integration contract: gaze in
-
-The teammate's `gaze.py` reaches this through `frontend/js/gaze-websocket.js`,
-which calls the two methods below. Any other tracker can call them directly.
-The controller owns the 2-second rule, so a noisy per-frame tracker cannot
-create duplicate away sessions.
-
-```js
-import { createGazeController } from "./gaze-interface.js";
-import { sessionNowMs } from "./session.js";
-
-const gaze = createGazeController({
-  thresholdMs: 2000,
-  onMissedWindow: recoverMissedWindow,   // from recovery.js
-});
-
-gaze.awayStart(sessionNowMs());   // call when the student looks away
-gaze.returned(sessionNowMs());    // call when they look back
-```
-
-```
-LOOKING        --away-->        POTENTIAL_AWAY
-POTENTIAL_AWAY --return <2s-->  LOOKING          (discard everything)
-POTENTIAL_AWAY --reaches 2s-->  CONFIRMED_AWAY
-CONFIRMED_AWAY --return-->      finalize [original awayStart, return]
-```
-
-Both timestamps must come from `sessionNowMs()` — `performance.now()` relative
-to session start. Never wall-clock time: it can jump backwards.
-
-The confirmed interval always begins at the **original** away timestamp. The
-first two seconds are part of what was missed; 2000 ms is only the trigger.
-
-The debug page exposes the live controller as `window.silentSpecsGaze`, so a
-tracker can be tested against it before the modules are merged.
-
-## Integration contract: summarizer out
-
-Every valid away window is appended to a session-wide missed transcript, held
-in memory and ordered by `start_ms`. It contains only missed sentences.
-
-```js
-store.onMissedWindow((record, session) => { /* fires per window */ });
-store.getSessionMissed();   // the whole SessionMissedTranscript
-```
-
-```bash
-curl http://127.0.0.1:8000/session/{session_id}/missed
-```
-
-```jsonc
-{
-  "session_id": "s-...",
-  "windows":   [ /* MissedWindowRecord, raw_text always intact */ ],
-  "sentences": [ /* flat, ordered by start_ms — the summarizer's input */ ],
-  "raw_text":  "everything missed, one window per line"
-}
-```
-
-Each sentence carries `kind`, `priority`, `confidence` and timestamps, so the
-summarizer can weight an `instruction_change` above `ordinary_context` without
-re-deriving anything. **Nothing is ever dropped**, including `ordinary_context`
-and anything Laya failed on.
-
-Set `SUMMARIZER_URL` to also have each new record POSTed there,
-fire-and-forget — a failing summarizer can never block or break recovery.
+1. You open Blink, type your name and press **Start**.
+2. The professor talks. The transcript fills in on the left.
+3. You look down to write something. Blink notices and starts keeping track.
+4. The professor says: "The problem set is now due Friday, not Monday."
+5. You look back up. The catch-up card lists the deadline change at the top,
+   under **Priorities**, with a short summary of the rest below it.
+6. Later, while you're looking at the board, the professor asks: "Andrea, what
+   do you think?" The screen edges glow and you look down. The question is right
+   there in the notification.
 
 ---
 
 ## How it works
 
+Blink is four small programs that talk to each other on your laptop.
+
 ```
-Chrome tab audio
-  -> AudioWorklet -> 60 s Float32 ring buffer          [ephemeral, memory only]
-
-gaze tracker -> gaze controller -> valid away window
-
-on return:
-  slice [away_start - pad, away_end + pad] -> 16-bit WAV
-  POST /recover
-    -> faster-whisper, word_timestamps=True -> absolute session-ms words
-    -> select words where end_ms > away_start AND start_ms < away_end   <- unpadded
-    -> raw_text preserved first, unconditionally
-    -> split on . ? !
-    -> Laya tags those fragments only
-    -> MissedWindowRecord -> session store
-  <- client re-runs the selector as a guard, then stores and renders
+ webcam ──► Eye tracker ──── "looking away" / "looking back" ────┐
+                                                                   ▼
+ microphone ──► Speech-to-text ──► Priority tagging ──► Web app (what you see)
+                                          │                        ▲
+                                          └──► Summarizer ──────────┘
 ```
 
-### Why an AudioWorklet instead of MediaRecorder
+**1. Eye tracker** (`gaze.py`, by Zachary). It watches your face through the
+webcam, using Google's MediaPipe to find your eyes, irises and head angle. A
+small model trained on *your* face decides, frame by frame, whether you're
+looking at the Blink window. It doesn't react to a single frame, though. It
+adds up the evidence over a few frames and only says "you looked away" once
+it's confident, so blinks and quick glances don't trigger anything.
 
-`MediaRecorder.start()` has unspecified startup latency, so `clip_start_ms`
-drifts from the true first sample. Counting samples in a worklet gives an exact
-clock, and a rolling buffer means the beginning of an away event is never lost
-to reaction time. The buffer is memory-only and holds 60 s; attended audio is
-overwritten and only the away slice is ever sent anywhere.
+**2. Speech-to-text** (`backend/`, by Mattia). It listens through the
+microphone, or to a Chrome tab for an online lecture, and turns speech into text
+with Whisper. While you look away, it cuts out exactly the words spoken in that
+window, down to the word. A second model, Laya, then tags those words as a
+question to you, a change of instructions, a decision, or just lecture content.
 
-### Why the clip is padded but the selection is not
+**3. Summarizer** (`summarizer.py`, by Louis). A small language model (Qwen 2.5,
+3B, run by Ollama) turns what you missed into a recap of about 60 words. It
+keeps names, numbers, dates and formulas exactly as they were said. If the
+summarizer isn't running, the cards still show the priorities and the exact
+words.
 
-Whisper aligns words badly at a hard clip edge, so `CLIP_PAD_MS` of acoustic
-context is added on each side *of the audio*. Selection still runs against the
-unpadded window, so padded words are dropped before anything is stored.
+**4. Web app** (`web/`, by Andrea). The page you actually look at: the
+transcript on ruled "notebook" paper, the catch-up cards, the glare, and a demo
+mode for trying it without a webcam or microphone.
 
-The pad must stay small. Measured on the synthetic fixture: 0–500 ms all
-recover the missed sentence exactly, but at **750 ms** the clip reached 400 ms
-into the next sentence and Whisper stretched its first word backwards across
-the silence, dragging an attended word inside the window and dropping all
-punctuation. Default is **250 ms**, and `tests/test_end_to_end_synthetic.py`
-fails if it is set outside the validated range.
+### Privacy
 
-### Laya is an accelerator, never a dependency
-
-Timestamps decide what was missed; Laya only decides how to rank and tag it.
-Every failure mode — disabled, unavailable, throwing, malformed answer, too few
-answers, unknown label — returns the complete raw missed text with
-`kind="unclassified"` and `show_by_default=true`. **Fail open, never closed.**
-`ordinary_context` may be collapsed in the compact card but stays in `raw_text`
-under *Show everything I missed*.
-
-Notes from reading the laya 0.3.20 source (its docs site documents a newer
-unreleased API, hence the pin):
-
-- `answer["confidence"]` is normalized Shannon entropy, **not** calibrated.
-  `answer["answer_confidence"]` (`max(p)`) is the calibrated one, and that is
-  what we report. Neither ever gates visibility.
-- Each `criteria` description is hard-truncated at 48 tokens, and
-  `instructions` shares a 256-token head budget with them. Both are checked by
-  a test so nothing is silently clipped.
-- States are passed as plain strings; a dict would be JSON-dumped verbatim into
-  the prompt.
+- Nothing leaves your laptop. Whisper, Laya, the summarizer and the eye tracker
+  all run locally, so it works without internet once it's set up.
+- The live transcript is only kept in the open page. The server only stores the
+  words you **missed**, and only those can reach the summarizer. It's built
+  that way on purpose: it can't be asked to summarize anything else.
+- The webcam images are never saved. Only "looking" or "not looking" leaves the
+  eye tracker.
 
 ---
 
-## API
+## Try it in 1 minute (demo mode)
 
-| | |
-|---|---|
-| `GET /health` | model and classifier status, active thresholds |
-| `POST /warmup` | force both models to load and run once |
-| `POST /transcribe` | raw STT with word timestamps (debugging) |
-| `POST /recover` | single-shot: `audio`, `away_start_ms`, `away_end_ms`, `clip_start_ms`, `session_id` → `MissedWindowRecord` |
-| `POST /window/{id}/chunk` | one slice of an absence still in progress |
-| `POST /window/{id}/finalize` | close a chunked absence → `MissedWindowRecord` |
-| `GET /session/{id}/missed` | accumulated missed transcript |
-| `POST /session/{id}/summarize` | `{from_ms, to_ms}` → `{summary, priorities}`; takes a range, never text |
-| `GET /session/{id}/summary` | recap of everything missed this session |
-| `POST /session/{id}/reset` | clear a session |
-
-## Configuration
-
-| Variable | Default | |
-|---|---|---|
-| `WHISPER_MODEL` | `base.en` | `tiny.en` if latency is tight, `small.en` for accuracy |
-| `WHISPER_DEVICE` / `WHISPER_COMPUTE_TYPE` | `cpu` / `int8` | |
-| `AWAY_THRESHOLD_MS` | `2000` | the two-second rule |
-| `CLIP_PAD_MS` | `250` | pad on the two outer edges; validated range 0–500 |
-| `CHUNK_MS` | `20000` | slice length flushed while the student is away |
-| `MIN_CHUNK_MS` | `8000` | shorter tails are merged: Whisper mangles slivers |
-| `CHUNK_PAD_MS` | `2000` | pad on interior chunk edges; safe to be generous |
-| `LAYA_ENABLED` | `1` | `0` disables tagging; raw missed text still works |
-| `LAYA_DEVICE` | auto | `mps` on Apple Silicon, or `cpu` |
-| `SUMMARIZER_DIR` | unset | directory containing the teammate's `summarizer.py` |
-| `SUMMARY_MAX_WORDS` | `60` | passed to `summarize()` |
-| `SUMMARY_MAX_WINDOWS` | `5` | windows per manual catch-up; each is one Ollama call |
-| `SUMMARIZER_URL` | unset | optional fire-and-forget hand-off |
-| `DEBUG_TRANSCRIPT` | `0` | **off by default** — transcript text must not reach the logs |
-
----
-
-## Tests
+No webcam, microphone or setup needed, just Python and Chrome:
 
 ```bash
-.venv/bin/python -m unittest discover -s tests -t . -p "test_*.py"   # 136
-node --test tests/js/*.test.mjs                                      # 102
-.venv/bin/python tools/validate_with_whisper.py                      # 20 checks
+python3 -m http.server 8000 --directory web
 ```
 
-Note the glob in the Node command: `node --test tests/js/` is interpreted as a
-module path, not a directory, on Node 24.
+Open <http://localhost:8000> and press **Start**. A scripted maths lecture plays.
 
-`tests/js/integration.test.mjs` is the end-to-end check: the synthetic lecture
-plays as the tab audio and recorded `gaze.py` frames stand in for the eye
-tracker, through the real source, recovery and backend, then the web app's card
-filter and the summarizer bridge. It needs the backend running on port 8000 and
-skips itself otherwise.
+- **Hold the Space bar** to pretend you're looking away. Let go to "look back".
+- Type **Andrea** in the name box, then hold Space around 25 seconds in. The
+  professor calls on Andrea and the screen glows.
 
-The Laya benchmark prints per-case predictions, accuracy, confusion counts and
-latency measured on the machine it runs on:
+## Run the real thing
+
+You need a Mac or Linux laptop with **16 GB of RAM** (8 GB works, but it's
+slow), **Chrome**, **Python 3.12 or 3.13** and, for the summaries,
+[Ollama](https://ollama.com).
+
+**1. Install** (once, about 15 minutes, several GB of downloads):
 
 ```bash
-.venv/bin/python -m unittest tests.test_laya_classifier_real
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
 ```
 
-### Measured on the demo laptop (Apple M1, 8 GB)
+**2. Teach the eye tracker your face** (once, about 5 minutes). The model in the
+repo was trained on someone else's face and screen, so it won't be reliable for
+you.
 
-| | |
+```bash
+.venv/bin/python gaze.py collect
+.venv/bin/python gaze.py train
+```
+
+Put the Blink window where you'll read it. In `collect`, press **P** while
+looking at it and **A** while looking elsewhere: the professor, your notes, the
+middle of the screen, your phone. Do at least 8 of each, then press **Q**.
+`train` tells you how accurate the result is.
+
+**3. Start everything:**
+
+```bash
+./run.sh
+```
+
+It starts the eye tracker, speech-to-text and the summarizer, warms up the
+models and opens Chrome. The first run downloads the models, so give it a few
+minutes. Press **Start**, allow the microphone, and you're live. **Ctrl+C** in
+the terminal stops everything.
+
+### Options
+
+| Command | What it does |
 |---|---|
-| Recovery, gaze-return → record, 6 s clip | **658 ms** median (607–950 over 5 warm runs) |
-| Whisper `base.en` int8 CPU | 0.44 s for a 6 s clip; 0.7 s cold load from cache |
-| Laya `typed-decisions` on MPS | 6.9 s cold load, 127 ms warm single, 92 ms/fragment batched |
-| Laya 12-case accuracy | **11/12 (91.7%)** |
-| Demo sentence → `instruction_change` | yes, confidence 0.70 |
+| `./run.sh` | Lecture in the room, heard through the microphone |
+| `BLINK_AUDIO=tab ./run.sh` | Online lecture: share the Chrome tab it's playing in, with "Also share tab audio" ticked |
+| `BLINK_LIVE=0 ./run.sh` | Strict privacy mode: only transcribe what you missed, no live transcript |
+| `BLINK_CAMERA=1 ./run.sh` | Use a different webcam. By default Blink picks the laptop's own camera |
+| `SUMMARIZER_MODEL=qwen2.5:1.5b-instruct-q5_K_M ./run.sh` | Smaller summarizer for a slower laptop |
 
-The criteria wording was tuned once against the 12-case set: describing the
-speaker's act ("the speaker asks the student…") scored 11/12 where naming the
-category scored 6/12. That wording is frozen in `backend/classifier.py`.
+Add `&debug=1` to the page's address to show the microphone picker and an audio
+level meter.
 
-Laya's published ~33 ms is a T4 GPU number. The figures above are this laptop.
+## If something goes wrong
+
+| What you see | What to do |
+|---|---|
+| **"Eye tracker offline"** | The eye tracker couldn't use the camera. On a Mac, allow the camera for the app you ran `./run.sh` from: System Settings → Privacy & Security → Camera. If your terminal isn't in the list, run it from the Terminal app and click Allow. Then run it again. |
+| **Your iPhone camera turns on** | Blink should pick the laptop camera by itself. If it doesn't, run `BLINK_CAMERA=1 ./run.sh`, or turn off Continuity Camera on the phone. |
+| **"Reading" / "Looking away" is wrong** | Redo step 2 with more varied takes, especially looking just next to the window. |
+| **It stalls at "warming models"** | The first run downloads Whisper and Laya. If it's stuck for more than 5 minutes, press Ctrl+C and run it again. |
+| **Nothing appears in the transcript** | Check that Chrome has microphone access, and open the page with `&debug=1` to see the audio level. |
+| **The glow didn't come on** | It only glows if you're still looking away when your name *reaches the screen*, which is about 4 seconds after it's said. If you'd already looked back, you just get the notification. |
+| **Catch-up cards are slow** | You're probably short on memory. Close other apps, or use the smaller summarizer (see Options). |
+
+Logs are in `.logs/`: `gaze.log` for the eye tracker and `backend.log` for the
+rest.
 
 ---
 
-## Repo layout
+## What's in this repo
 
-```
-backend/
-  missed_selector.py   the correctness core — no third-party imports
-  pipeline.py          select -> preserve raw -> fragment -> classify
-  stt.py               faster-whisper, loaded once
-  classifier.py        Laya, loaded once, fail-open
-  session_store.py     session accumulation for the summarizer
-  app.py schemas.py config.py
-frontend/js/
-  session.js           the one clock (performance.now)
-  pcm-recorder.worklet.js + audio-capture.js   ring buffer, WAV slicing
-  gaze-interface.js    the gaze contract + 2 s state machine
-  gaze-stub.js         keyboard + scripted timelines, for testing
-  missed-selector.js   JS mirror, runs as a client-side guard
-  recovery.js store.js app.js
-tools/     generate_synthetic_audio.py, validate_with_whisper.py, wav_util.py
-tests/     python suites + tests/js/*.test.mjs
-```
+| Path | What it is |
+|---|---|
+| `web/` | The web app: transcript, catch-up cards, glare, demo mode |
+| `gaze.py` | The eye tracker: record, train and run |
+| `backend/` | Speech-to-text, word selection, Laya tagging, the summarizer bridge |
+| `frontend/js/` | Audio capture and the live-transcript pipeline the web app loads |
+| `summarizer.py` | The summarizer (Ollama) |
+| `run.sh` | Starts everything with one command |
+| `tools/` | Helpers: camera picker, test audio, summarizer checks |
+| `docs/TECHNICAL.md` | The detailed technical write-up: APIs, clocks, edge cases, tests |
 
-## Known limitations
+## The team
 
-- Absence length is no longer bounded by the 60 s ring buffer, because chunks
-  are flushed while the student is away. The exception is a background tab so
-  throttled that no flush runs for over a minute; the return path then drains
-  what is still buffered, and `recovery.js` warns if the start was lost.
-- The sample clock is anchored to `performance.now()` once at the first audio
-  block. Over a very long session the AudioContext clock can drift slightly
-  from `performance.now()`; irrelevant at the scale of a single away window.
-- One of the 12 classifier cases ("Can you tell me why the demand curve shifts
-  to the right?") is tagged `ordinary_context`, and it is misread the same way
-  in the long synthetic lecture. It is collapsed in the compact card and left
-  out of the priorities, but remains in the exact words.
-- Only one away window is recovered at a time. A second absence starting before
-  the first finishes recovering waits for it.
-- `tools/generate_synthetic_audio.py` uses macOS `say` and is macOS-only. The
-  rest of the system is not.
+Built at the BAINSA hackathon, September 2026.
+
+- **Zachary**: eye tracking
+- **Mattia**: speech-to-text and the backend
+- **Louis**: summarizer
+- **Andrea**: web app and design
