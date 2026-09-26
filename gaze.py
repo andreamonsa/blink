@@ -4,6 +4,7 @@ Gaze panel detector — train a personal "am I looking at the top-right panel?" 
     python gaze.py collect     # record labelled examples from your webcam
     python gaze.py train       # train + evaluate a classifier, save gaze_model.pkl
     python gaze.py run         # live detection; sends events to the web page over WebSocket
+    python gaze.py clean       # list recordings / delete bad ones (keeps a backup)
 
 Setup (once):
     pip install mediapipe websockets numpy
@@ -34,9 +35,11 @@ import numpy as np
 
 MODEL_URL = ("https://storage.googleapis.com/mediapipe-models/face_landmarker/"
              "face_landmarker/float16/1/face_landmarker.task")
-LANDMARKER_PATH = "face_landmarker.task"
-DATA_PATH = "gaze_data.csv"
-MODEL_PATH = "gaze_model.pkl"
+# All files live next to this script, whatever folder the terminal is in.
+HERE = os.path.dirname(os.path.abspath(__file__))
+LANDMARKER_PATH = os.path.join(HERE, "face_landmarker.task")
+DATA_PATH = os.path.join(HERE, "gaze_data.csv")
+MODEL_PATH = os.path.join(HERE, "gaze_model.pkl")
 
 # ---------------------------------------------------------------- landmarks
 # MediaPipe 478-point face mesh indices
@@ -316,6 +319,13 @@ def grouped_folds(y, groups, k):
 def cmd_train(args):
     import pickle
     X, y, groups, ts = load_data()
+    if getattr(args, "drop", None):
+        unknown = set(args.drop) - set(groups)
+        if unknown:
+            print(f"Warning: no such take(s): {', '.join(sorted(unknown))}")
+        keep = ~np.isin(groups, args.drop)
+        print(f"Leaving out {int((~keep).sum())} frames from {len(set(args.drop) - unknown)} take(s) (data file unchanged).")
+        X, y, groups, ts = X[keep], y[keep], groups[keep], ts[keep]
     n_takes = {lab: len(set(groups[y == lab])) for lab in (0, 1)}
     print(f"{len(y)} frames | panel: {(y==1).sum()} frames / {n_takes[1]} takes | "
           f"away: {(y==0).sum()} frames / {n_takes[0]} takes")
@@ -384,11 +394,11 @@ def cmd_train(args):
     print(f"\nCalibration temperature T = {T:.2f}  (>1 means the model was over-confident)")
 
     # ---- Simulate the evidence detector on each held-out take, in recorded order.
-    print(f"\nSimulated signal (false_alarm={args.false_alarm}, miss={args.miss}, scale={args.scale}):")
+    print(f"\nSimulated signal (false_alarm={args.false_alarm}, miss={args.miss}, scale={args.scale}, bias={args.bias}):")
     false_alarms, latencies, missed = [], [], 0
     for tk in take_order:
         mask = groups == tk
-        det = EvidenceDetector(args.false_alarm, args.miss, args.leave_false_alarm, args.scale, args.clip, T)
+        det = EvidenceDetector(args.false_alarm, args.miss, args.leave_false_alarm, args.scale, args.clip, T, args.bias)
         fired_at = None
         for p, tt in zip(pred_p[mask], ts[mask]):
             if det.update(float(p)) == "panel":
@@ -420,6 +430,56 @@ def cmd_train(args):
         print("Tip: add more varied AWAY takes, especially just outside the panel and looking up at the lecturer.")
 
 
+# ---------------------------------------------------------------- clean
+def cmd_clean(args):
+    """List sessions/takes, or permanently delete some (after making a backup)."""
+    import shutil
+    if not os.path.exists(DATA_PATH):
+        sys.exit(f"No {DATA_PATH} found next to gaze.py.")
+    with open(DATA_PATH, newline="") as f:
+        reader = csv.reader(f)
+        header = next(reader)
+        rows = list(reader)
+    si, ti, li, tti = header.index("session"), header.index("take"), header.index("label"), header.index("t")
+
+    targets_s, targets_t = set(args.session or []), set(args.take or [])
+    if not targets_s and not targets_t:
+        # summary: one line per session, then its takes
+        sessions = {}
+        for r in rows:
+            sessions.setdefault(r[si], {}).setdefault(r[ti], []).append(r)
+        print(f"{len(rows)} frames in {len(sessions)} sessions  ({DATA_PATH})\n")
+        for sess, takes in sessions.items():
+            nice = f"{sess[9:11]}:{sess[11:13]}:{sess[13:15]}" if len(sess) >= 15 else sess
+            print(f"session {sess}  (started {nice})  {len(takes)} takes")
+            for tk, trs in takes.items():
+                lab = "PANEL" if trs[0][li] == "1" else "away "
+                dur = float(trs[-1][tti]) - float(trs[0][tti])
+                flag = "   <- short/odd" if len(trs) < 60 or dur < 3 else ""
+                print(f"    {lab} {tk:26s} {len(trs):4d} frames  {dur:4.1f}s{flag}")
+        print("\nDelete with:  py gaze.py clean --session <id>   or   py gaze.py clean --take <id> <id> ...")
+        return
+
+    remove = [r for r in rows if r[si] in targets_s or r[ti] in targets_t]
+    if not remove:
+        sys.exit("Nothing matched those IDs. Run `py gaze.py clean` to list them.")
+    removed_takes = sorted({r[ti] for r in remove})
+    print(f"Will delete {len(remove)} frames from {len(removed_takes)} take(s):")
+    for tk in removed_takes:
+        print("   ", tk)
+    if not args.yes and input("Type y to confirm: ").strip().lower() != "y":
+        sys.exit("Cancelled, nothing changed.")
+    backup = DATA_PATH.replace(".csv", time.strftime("_backup_%H%M%S.csv"))
+    shutil.copy(DATA_PATH, backup)
+    keep = [r for r in rows if not (r[si] in targets_s or r[ti] in targets_t)]
+    with open(DATA_PATH, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(header)
+        w.writerows(keep)
+    print(f"Done. {len(keep)} frames left. Backup of the old file: {os.path.basename(backup)}")
+    print("Now re-run:  py gaze.py train")
+
+
 # ---------------------------------------------------------------- run
 class EvidenceDetector:
     """
@@ -442,17 +502,18 @@ class EvidenceDetector:
     """
 
     def __init__(self, false_alarm=0.01, miss=0.05, leave_false_alarm=0.05,
-                 scale=0.3, clip=3.0, temperature=1.0):
+                 scale=0.3, clip=3.0, temperature=1.0, bias=0.0):
         self.h_enter = math.log((1 - miss) / false_alarm)
         self.h_leave = math.log((1 - miss) / leave_false_alarm)
         self.scale, self.clip, self.T = scale, clip, temperature
+        self.bias = bias   # subtracted from every frame's log-odds: >0 leans towards 'away'
         self.S, self.state = 0.0, "away"
 
     def frame_llr(self, prob):
         if prob is None:                       # no face -> firm evidence for away
             return -self.clip * self.scale
         p = min(max(prob, 1e-6), 1 - 1e-6)
-        llr = math.log(p / (1 - p)) / self.T
+        llr = math.log(p / (1 - p)) / self.T - self.bias
         return self.scale * max(-self.clip, min(self.clip, llr))
 
     @property
@@ -542,16 +603,25 @@ async def run_async(args):
             clients.discard(ws)
 
     T = bundle.get("temperature", 1.0)
-    sm = EvidenceDetector(args.false_alarm, args.miss, args.leave_false_alarm, args.scale, args.clip, T)
+    sm = EvidenceDetector(args.false_alarm, args.miss, args.leave_false_alarm, args.scale, args.clip, T, args.bias)
     print(f"Signal when evidence >= {sm.h_enter:.2f} nats (likelihood ratio {math.exp(sm.h_enter):.0f}:1), "
-          f"false_alarm={args.false_alarm}, miss={args.miss}, temperature={T:.2f}")
+          f"false_alarm={args.false_alarm}, miss={args.miss}, bias={args.bias}, temperature={T:.2f}")
     cam = Camera(args.camera)
     import cv2
     from websockets.asyncio.server import serve
 
     term = TerminalSignal()
-    async with serve(handler, "localhost", args.port):
+    last_status_ms = 0
+    async with serve(handler, args.host, args.port):
         print(f"WebSocket on ws://localhost:{args.port}  — open index.html?source=python")
+        if args.host != "localhost":
+            import socket
+            try:
+                s_ = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s_.connect(("8.8.8.8", 80))
+                ip = s_.getsockname()[0]; s_.close()
+            except OSError:
+                ip = "<this laptop's IP>"
+            print(f"Other laptops on the same Wi-Fi connect to: ws://{ip}:{args.port}")
         print("Press Q in the preview window (or Ctrl+C here) to stop.\n")
         frames, fps_t, fps = 0, time.monotonic(), 0.0
         while True:
@@ -572,6 +642,12 @@ async def run_async(args):
                 await broadcast(msg)
                 term.change(changed, sm.last_evidence, now_ms, msg.get("since"))
             term.status(sm, prob)
+            # live status for listeners (~5x/s) so they can show activity
+            if now_ms - last_status_ms >= 200 and clients:
+                last_status_ms = now_ms
+                await broadcast({"type": "status", "zone": sm.state, "t": now_ms,
+                                 "p": None if prob is None else round(prob, 3),
+                                 "evidence": round(sm.S, 2), "threshold": round(sm.threshold, 2)})
 
             frames += 1
             if time.monotonic() - fps_t >= 1:
@@ -612,6 +688,8 @@ def add_detector_args(p):
     p.add_argument("--scale", type=float, default=0.3,
                    help="evidence per frame is multiplied by this (frames are correlated, not independent)")
     p.add_argument("--clip", type=float, default=3.0, help="max |log-likelihood ratio| from one frame")
+    p.add_argument("--bias", type=float, default=0.0,
+                   help="lean towards 'away': subtracted from every frame's log-odds (try 0.5-1.5)"),
 
 
 if __name__ == "__main__":
@@ -624,15 +702,24 @@ if __name__ == "__main__":
 
     t = sub.add_parser("train", help="train and evaluate the classifier")
     add_detector_args(t)
+    t.add_argument("--drop", nargs="*", default=[],
+                   help="take IDs to leave out (e.g. mislabelled ones), as printed in the per-take list")
+
+    cl = sub.add_parser("clean", help="list recordings, or delete bad ones (makes a backup)")
+    cl.add_argument("--session", nargs="*", help="session ID(s) to delete entirely")
+    cl.add_argument("--take", nargs="*", help="take ID(s) to delete")
+    cl.add_argument("--yes", action="store_true", help="don't ask for confirmation")
 
     r = sub.add_parser("run", help="live detection + WebSocket events")
     r.add_argument("--camera", default="0")
     r.add_argument("--port", type=int, default=8765)
+    r.add_argument("--host", default="localhost",
+                   help="use 0.0.0.0 to let teammates' laptops on the same Wi-Fi receive the signal")
     add_detector_args(r)
     r.add_argument("--no-preview", action="store_true")
 
     if len(sys.argv) == 1:   # e.g. pressed Run in VS Code with no arguments
-        choice = input("Which step? [c]ollect / [t]rain / [r]un: ").strip().lower()[:1]
-        sys.argv.append({"c": "collect", "t": "train", "r": "run"}.get(choice, "collect"))
+        choice = input("Which step? [c]ollect / [t]rain / [r]un / c[l]ean: ").strip().lower()[:1]
+        sys.argv.append({"c": "collect", "t": "train", "r": "run", "l": "clean"}.get(choice, "collect"))
     args = ap.parse_args()
-    {"collect": cmd_collect, "train": cmd_train, "run": cmd_run}[args.cmd](args)
+    {"collect": cmd_collect, "train": cmd_train, "run": cmd_run, "clean": cmd_clean}[args.cmd](args)
