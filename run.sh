@@ -5,6 +5,8 @@
 #   BLINK_AUDIO=tab ./run.sh    online lecture: capture a Chrome tab's audio
 #   BLINK_LIVE=0 ./run.sh       strict mode: only what was missed is transcribed
 #   SUMMARIZER_MODEL=qwen2.5:1.5b-instruct-q5_K_M ./run.sh   weaker laptop
+#   BLINK_CAMERA=1 ./run.sh     force a camera index (by default the built-in
+#                               webcam is picked by name, never an iPhone)
 cd "$(dirname "$0")"
 PY=.venv/bin/python
 AUDIO="${BLINK_AUDIO:-mic}"
@@ -30,7 +32,10 @@ else
 fi
 
 # 2. Eye tracker (needs camera permission for this terminal)
-$PY gaze.py run --no-preview >"$LOGS/gaze.log" 2>&1 &
+: >"$LOGS/camera.log"
+CAMERA="${BLINK_CAMERA:-$($PY tools/pick_camera.py 2>"$LOGS/camera.log")}"
+echo "eye tracker camera: $(cat "$LOGS/camera.log" 2>/dev/null || echo "index $CAMERA")"
+$PY gaze.py run --no-preview --camera "$CAMERA" >"$LOGS/gaze.log" 2>&1 &
 GAZE_PID=$!
 
 # 3. Backend + UI

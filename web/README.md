@@ -20,6 +20,7 @@ python3 -m http.server 8000 --directory web
 | `index.html` / `styles.css` | Layout and the "Editorial notebook" design |
 | `app.js` | UI: transcript, scroll-back, "missed" highlighting, catch-up cards, buttons |
 | `ruled.js` | Keeps text sitting exactly on the ruled lines (visual only) |
+| `attention.js` | Glare: name box, edge glow and notification when the student's name is called |
 | `sources.js` | **The only place teammates' code plugs in**: gaze, transcript, summarizer |
 | `mock-lecture.js` | Scripted lecture for demo mode |
 
@@ -45,6 +46,15 @@ The card accepts `{ summary: string | string[], priorities?: string[] }`. The pl
 
 Formulas are rendered with KaTeX (loaded from a CDN) using the `\( \)`, `\[ \]` and `$$ $$` delimiters, which is what
 `summarizer.py` produces. Single `$` is ignored on purpose, so "$5" in speech isn't treated as math. Formulas render while a line is still being spoken. A formula that's only half spoken, with no closing `\)` yet, stays as plain text until it's complete. If KaTeX can't load, formulas show as raw text.
+
+## Glare: "someone said your name"
+
+The student types their name in the header box. Nicknames can be added with commas, for example `Andrea, Andy`, and the name is saved in the browser. When the name shows up in the transcript:
+
+- **Glow**, only if the student is **not looking at the screen**: a pulsing amber gradient around the screen edges, aimed at peripheral vision. It stops as soon as the eye tracker reports `zone: "panel"`, or after 30 seconds as a safety net.
+- **Notification**, always: shows what was said, with a "Show in transcript" link. It closes with ✕ or Esc, or on its own after 30 seconds.
+
+"Not looking" is checked when the line reaches the page, because live speech-to-text lags a few seconds behind the speaker. Detection runs in the browser as soon as the name appears, including in text that's still being transcribed. It ignores case and accents, only matches whole words, and allows one wrong letter in names of five or more letters, because speech-to-text often misspells names. It relies on `app.js` dispatching `blink:line` and `blink:zone` events. Other sources can trigger the same alert with `Blink.callAttention({ text, t })`.
 
 ## Ruled lines
 

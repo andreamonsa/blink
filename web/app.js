@@ -108,6 +108,9 @@
       // and leaves a half-spoken formula as plain text until it's complete.
       renderMath(body);
     });
+    // Lets add-ons (attention.js) react to what's being said.
+    const line = state.lines.get(id);
+    document.dispatchEvent(new CustomEvent("blink:line", { detail: { id, t: line.t, text, final, missed, el: line.el } }));
   }
 
   function marker(kind, text) {
@@ -142,6 +145,7 @@
       createCatchup(from, msg.t, "gaze");
     }
     renderGazePill();
+    document.dispatchEvent(new CustomEvent("blink:zone", { detail: { zone: msg.zone, sync } }));
   }
 
   function onGazeStatus(status) {
@@ -291,9 +295,7 @@
   el.summary.addEventListener("click", manualCatchup);
 
   // ---------------------------------------------------------------- boot
-  el.hint.textContent = mode === "python"
-    ? `Eye tracking from gaze.py (${gazeUrl}). Transcript: demo lecture.`
-    : "Demo mode: hold Space to simulate looking away.";
+  el.hint.textContent = mode === "python" ? "" : "Demo mode: hold Space to simulate looking away.";
   renderCatchups();
   gaze.connect({ onZone, onStatus: onGazeStatus });
   // KaTeX loads with `defer`; typeset anything rendered before it arrived.

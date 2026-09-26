@@ -23,6 +23,11 @@
           <h1 id="transcript-title">Real time transcript</h1>
         </div>
         <div class="pills">
+          <label id="name-pill" class="pill name-pill" title="Blink alerts you when this name is said. Add nicknames with commas.">
+            <svg class="name-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg>
+            <span class="sr-only">Your name</span>
+            <input id="student-name" type="text" placeholder="Your name" autocomplete="given-name" spellcheck="false" size="9">
+          </label>
           <span id="live-pill" class="pill">Paused</span>
           <span id="gaze-pill" class="pill">Eye tracker…</span>
         </div>
@@ -33,6 +38,18 @@
           <p id="transcript-empty" class="empty">Press <strong>start</strong> to begin live captions.</p>
         </div>
         <button id="jump-live" class="jump-live" hidden>Back to live ↓</button>
+        <!-- "Someone said your name" notification (attention.js) -->
+        <section id="attention-notice" class="attention-notice" role="alert" hidden>
+          <div class="notice-head">
+            <span class="notice-dot" aria-hidden="true"></span>
+            <strong>Someone said your name</strong>
+            <time class="notice-time"></time>
+            <button class="notice-close" aria-label="Dismiss">✕</button>
+          </div>
+          <p class="notice-quote"></p>
+          <button class="notice-jump">Show in transcript</button>
+          <div class="notice-timer" aria-hidden="true"></div>
+        </section>
       </div>
 
       <footer class="controls">
@@ -52,6 +69,12 @@
     </aside>
   </main>
 
+  <!-- "Someone said your name": screen-edge glow (attention.js) -->
+  <div id="attention-glow" class="attention-glow" aria-hidden="true">
+    <div class="glow-bloom"><div class="glow-band"></div></div>
+    <div class="glow-band glow-edge"></div>
+  </div>
+
   <script>
     document.querySelectorAll(".today").forEach((el) => {
       el.textContent = new Date().toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
@@ -59,6 +82,7 @@
   </script>
   <script src="mock-lecture.js"></script>
   <script src="sources.js"></script>
+  <script src="attention.js"></script> <!-- before app.js so it hears the first gaze state -->
   <script src="app.js"></script>
   <script src="ruled.js"></script>
 </body>

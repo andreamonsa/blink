@@ -12,6 +12,9 @@ httpx
 ollama
 
 # gaze.py (run as its own process: python gaze.py run --no-preview)
-mediapipe
+# Pinned: mediapipe 1.0.x aborts on macOS ("graph_service ... Service is unavailable").
+mediapipe==0.10.35
 websockets
 numpy
+# tools/pick_camera.py: lets run.sh pick the Mac's webcam by name, not an iPhone
+pyobjc-framework-AVFoundation; sys_platform == "darwin"

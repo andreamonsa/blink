@@ -145,7 +145,11 @@ window.Blink = window.Blink || {};
   // The module is an ES module loaded from the STT backend. Importing it now,
   // at page load, keeps start() inside the Start click: tab capture needs that
   // user gesture, and an import started inside the click could outlive it.
-  const micPicker = null;
+  // Troubleshooting overlays (microphone picker, audio status badge) only with
+  // &debug=1, so the student's screen stays clean. Without the picker the
+  // browser's default microphone is used.
+  const DEBUG = params.get("debug") === "1";
+  const micPicker = DEBUG && SOURCE === "python" && AUDIO === "mic" ? createMicPicker() : null;
 
   const realSource = SOURCE === "python"
     ? import("/js/silentspecs-source.js").then((m) =>
@@ -338,7 +342,7 @@ window.Blink = window.Blink || {};
       async start(onLine) {
         const src = await realSource;
         micPicker?.setRunning(true);
-          src.start(onLine).catch(reportStartError);
+        src.start(onLine).then(() => { if (DEBUG) showBadge(src); }).catch(reportStartError);
       },
       async stop() { hideBadge(); micPicker?.setRunning(false); (await realSource).stop(); },
       // app.js awaits this before building a gaze catch-up card, so the card
