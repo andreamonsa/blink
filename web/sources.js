@@ -145,7 +145,7 @@ window.Blink = window.Blink || {};
   // The module is an ES module loaded from the STT backend. Importing it now,
   // at page load, keeps start() inside the Start click: tab capture needs that
   // user gesture, and an import started inside the click could outlive it.
-  const micPicker = SOURCE === "python" && AUDIO === "mic" ? createMicPicker() : null;
+  const micPicker = null;
 
   const realSource = SOURCE === "python"
     ? import("/js/silentspecs-source.js").then((m) =>
@@ -321,6 +321,7 @@ window.Blink = window.Blink || {};
       badge.style.color = color;
       badge.textContent = `\u{1F399} ${h.device || "?"}\n${bar} livello ${(h.peakLevel ?? 0).toFixed(3)}\n${line1}${line2 ? "\n" + line2 : ""}${liveLine}`;
 
+
     };
     paint();
     badgeTimer = setInterval(paint, 500);
@@ -337,7 +338,7 @@ window.Blink = window.Blink || {};
       async start(onLine) {
         const src = await realSource;
         micPicker?.setRunning(true);
-        src.start(onLine).then(() => showBadge(src)).catch(reportStartError);
+          src.start(onLine).catch(reportStartError);
       },
       async stop() { hideBadge(); micPicker?.setRunning(false); (await realSource).stop(); },
       // app.js awaits this before building a gaze catch-up card, so the card
