@@ -323,3 +323,13 @@ INFO:     127.0.0.1:38130 - "POST /window/w21-muifn90u/finalize HTTP/1.1" 200 OK
 2026-09-26 15:36:01,460 INFO httpx: HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
 2026-09-26 15:36:01,460 INFO silentspecs: summarized 1 window(s) for s-muifa3zg-7d0bun (summarizer_ok=True)
 INFO:     127.0.0.1:38130 - "POST /session/s-muifa3zg-7d0bun/summarize HTTP/1.1" 200 OK
+2026-09-26 15:36:28,087 INFO faster_whisper: Processing audio with duration 00:10.094
+2026-09-26 15:36:28,103 INFO faster_whisper: VAD filter removed 00:00.000 of audio
+2026-09-26 15:36:28,537 INFO backend.stt: transcribed 17 words in 0.62s
+2026-09-26 15:36:28,537 INFO silentspecs: window w22-muifnvy7 chunk 0 [640753, 650574] -> 17 of 17 words kept (17 total)
+INFO:     127.0.0.1:53276 - "POST /window/w22-muifnvy7/chunk HTTP/1.1" 200 OK
+2026-09-26 15:36:29,207 INFO silentspecs: finalized window w22-muifnvy7 [640753, 650574] -> 17 words, 3 items
+INFO:     127.0.0.1:53276 - "POST /window/w22-muifnvy7/finalize HTTP/1.1" 200 OK
+2026-09-26 15:36:30,193 INFO httpx: HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+2026-09-26 15:36:30,193 INFO silentspecs: summarized 1 window(s) for s-muifa3zg-7d0bun (summarizer_ok=True)
+INFO:     127.0.0.1:53276 - "POST /session/s-muifa3zg-7d0bun/summarize HTTP/1.1" 200 OK
